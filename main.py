@@ -142,7 +142,7 @@ def main():
     # 创建魔方实例（初始为已解决状态）
     cube = SimpleRubiksCube()
     # 定义打乱公式，例如 "R U R' U'"
-    algorithm = "R U U R' U' R U' R'"
+    algorithm = "R"
     print("应用公式:", algorithm)
     cube.apply_algorithm(algorithm)
 
