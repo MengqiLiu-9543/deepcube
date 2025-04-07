@@ -291,11 +291,8 @@ class RubiksCubeEnv(gym.Env):
                     alg = random.choice(self.pll_algs)
                 
                 # 手动反转算法
-                reversed_alg = self._reverse_algorithm(alg)
-                scramble_algs.append(reversed_alg)
-                print(f"反转前的算法: {alg}")
-                print(f"反转后的算法: {reversed_alg}")
-                scramble_actions.extend(self._parse_and_apply_algorithm(reversed_alg))
+                scramble_algs.append(alg)
+                scramble_actions.extend(self._parse_and_apply_algorithm(alg))
                 
                 # 检查前两层是否保持还原
                 if not self._check_first_two_layers_solved():
