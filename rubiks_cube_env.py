@@ -19,16 +19,23 @@ class RubiksCubeEnv(gym.Env):
     
     # 修改OLL/PLL算法列表，只包含确保不会影响前两层的算法
     oll_algs = [
-        "R U2 R' U' R U' R'",     # OLL 27 (Sune)
-        "R' U' R U' R' U2 R",     # OLL 26 (Antisune)
-        "F R U R' U' F'",         # OLL 45
-        "U R U2 R' U' R U' R'"    # OLL 27 with U 前缀
+        #"R U2 R' U' R U' R'",     # OLL 27 (Sune)
+        "R U R' U R U2 R'",
+        #"R' U' R U' R' U2 R",     # OLL 26 (Antisune)
+        "R' U2 R U R' U R"
+        #"F R U R' U' F'",         # OLL 45
+        "F U R U' R' F'"
+        #"U R U2 R' U' R U' R'"    # OLL 27 with U 前缀
+        "R U R' U R U2 R' U'"
     ]
 
     pll_algs = [
-        "R U' R U R U R U' R' U' R2",   # U-perm (a)
-        "R2 U R U R' U' R' U' R' U R'", # U-perm (b)
-        "U R U' R U R U R U' R' U' R2"  # U-perm (a) with U 前缀
+        #"R U' R U R U R U' R' U' R2",   # U-perm (a)
+        "R2 U R U R' U' R' U' R' U R'"
+        #"R2 U R U R' U' R' U' R' U R'", # U-perm (b)
+        "R U' R U R U R U' R' U' R2"
+        #"U R U' R U R U R U' R' U' R2"  # U-perm (a) with U 前缀
+        "R2 U R U R' U' R' U' R' U R' U'"
     ]
 
     # 只改变顶层朝向的几种简单插入
