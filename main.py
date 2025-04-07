@@ -120,8 +120,8 @@ def plot_cube(cube, save_path="scrambled_cube.png"):
     """
     # 定义面名顺序：依据初始化顺序 0: 上, 1: 左, 2: 前, 3: 右, 4: 后, 5: 下
     face_names = ["Up", "Left", "Front", "Right", "Back", "Down"]
-    # 定义颜色映射（与魔方状态数值对应：0上白、1左蓝、2前红、3右绿、4后橙、5下黄）
-    cmap = colors.ListedColormap(['white', 'blue', 'red', 'green', 'orange', 'yellow'])
+    # 定义颜色映射（与魔方状态数值对应：0上白、1左绿、2前红、3右蓝、4后橙、5下黄）
+    cmap = colors.ListedColormap(['white', 'green', 'red', 'blue', 'orange', 'yellow'])
 
     fig, axs = plt.subplots(2, 3, figsize=(8, 6))
     axs = axs.flatten()
