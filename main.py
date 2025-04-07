@@ -65,8 +65,8 @@ class SimpleRubiksCube:
             4: [(0, 0, True), (1, 0, True), (5, 2, False), (3, 2, False)],
             # 左面 (1)旋转影响：上(0)的左列、前(2)的左列、下(5)的左列、后(4)的右列
             1: [(0, 0, False), (2, 0, False), (5, 0, False), (4, 2, True)],
-            # 右面 (3)旋转影响：上(0)的右列、前(2)的右列、下(5)的右列、后(4)的左列 
-            3: [(0, 2, False), (2, 2, False), (5, 2, False), (4, 0, True)]
+            # 右面 (3)旋转影响：前(2)的右列、上(0)的右列、后(4)的左列、下(5)的右列
+            3: [(2, 2, False), (0, 2, False), (4, 0, True), (5, 2, False)]
         }
         if face_idx not in adjacent_faces:
             return
