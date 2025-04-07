@@ -128,133 +128,153 @@ def test_scramble_modes():
     env.visualize_cube(save_path="cube_images/scramble_modes/no_scramble.png")
 
 def test_check_first_two_layers():
-    """测试检查前两层是否解决的逻辑"""
+    """测试检查魔方前两层是否已解决的逻辑"""
+    print("\n===== 测试前两层检查逻辑 =====")
+    
     # 创建输出目录
     os.makedirs("cube_images/first_two_layers", exist_ok=True)
     
-    print("\n===== 测试前两层检查逻辑 =====")
-    
+    # 初始化环境
     env = RubiksCubeEnv(cube_size=3, scramble_moves=0, use_oll_pll=False, debug_mode=True)
     env.reset()
     
-    # 首先检查已解决的魔方
-    print("\n初始状态 - 已解决的魔方:")
+    # 保存初始状态
+    print("保存初始状态图像...")
+    image_path = "cube_images/first_two_layers/initial_state.png"
+    env.visualize_cube(save_path=image_path)
+    print(f"初始状态图像已保存到: {image_path}")
+    
+    # 初始检查
+    print("检查初始状态的前两层:")
     is_f2l_solved = env._check_first_two_layers_solved()
     print(f"前两层是否已解决: {is_f2l_solved}")
-    env.visualize_cube(save_path="cube_images/first_two_layers/initial_state.png")
     
     # 测试不同动作对前两层的影响
-    test_actions = [
-        {"name": "U (上面顺时针)", "action": 8, "should_preserve": True},
-        {"name": "D (下面顺时针)", "action": 10, "should_preserve": False},
-        {"name": "F (前面顺时针)", "action": 0, "should_preserve": False}
-    ]
+    test_actions = {
+        "U": 8,     # 只旋转顶层，前两层应该保持不变
+        "D": 10,    # 旋转底层，会改变前两层
+        "F": 0      # 旋转前面，会改变前两层
+    }
     
-    for test in test_actions:
+    for action_name, action_idx in test_actions.items():
         # 重置魔方
         env.reset()
         
         # 执行动作
-        print(f"\n执行动作: {test['name']}")
-        env.step(test['action'])
+        print(f"\n执行动作: {action_name}")
+        env.step(action_idx)
+        
+        # 保存状态
+        image_path = f"cube_images/first_two_layers/after_{action_name}.png"
+        print(f"保存动作后状态图像: {image_path}")
+        env.visualize_cube(save_path=image_path)
         
         # 检查前两层
         is_f2l_solved = env._check_first_two_layers_solved()
-        print(f"前两层是否保持不变: {is_f2l_solved}")
+        print(f"执行 {action_name} 后，前两层是否保持不变: {is_f2l_solved}")
         
-        # 验证结果是否符合预期
-        if is_f2l_solved == test["should_preserve"]:
-            print(f"正确: {test['name']} {'应该' if test['should_preserve'] else '不应该'}保持前两层不变")
+        # 输出期望结果
+        should_preserve = action_name == "U"
+        if should_preserve and not is_f2l_solved:
+            print(f"错误: {action_name} 应该保持前两层不变，但未能做到")
+        elif not should_preserve and is_f2l_solved:
+            print(f"意外结果: {action_name} 意外地保持了前两层不变")
         else:
-            print(f"错误: {test['name']} {'应该' if test['should_preserve'] else '不应该'}保持前两层不变，但结果相反")
-        
-        # 可视化结果
-        env.visualize_cube(save_path=f"cube_images/first_two_layers/after_{test['name'].split()[0]}.png")
+            expected = "保持前两层不变" if should_preserve else "改变前两层"
+            actual = "前两层不变" if is_f2l_solved else "前两层已改变"
+            print(f"结果正确: {action_name} 预期 {expected}，实际 {actual}")
     
-    print("\n前两层检查逻辑测试完成。图像已保存到 cube_images/first_two_layers 目录。")
+    print("\n前两层检查测试完成。图像已保存到 cube_images/first_two_layers 目录。")
 
 def test_action_reversibility():
-    """测试动作的可逆性"""
+    """测试魔方动作的可逆性"""
+    print("\n===== 测试魔方动作可逆性 =====")
+    
     # 创建输出目录
     os.makedirs("cube_images/reversibility", exist_ok=True)
     
-    print("\n===== 测试动作可逆性 =====")
-    
+    # 初始化环境
     env = RubiksCubeEnv(cube_size=3, scramble_moves=0, use_oll_pll=False, debug_mode=True)
     
-    action_pairs = [
-        {"name": "F & F'", "actions": [0, 1]},
-        {"name": "U & U'", "actions": [8, 9]},
-        {"name": "R & R'", "actions": [6, 7]},
-        {"name": "L & L'", "actions": [4, 5]},
-        {"name": "B & B'", "actions": [2, 3]},
-        {"name": "D & D'", "actions": [10, 11]}
-    ]
+    # 动作名称
+    action_names = ["F", "F'", "B", "B'", "L", "L'", "R", "R'", "U", "U'", "D", "D'"]
     
-    for pair in action_pairs:
+    # 测试每对动作的可逆性
+    for action in range(0, 12, 2):  # 偶数索引的动作和它们的逆操作
         # 重置魔方
         env.reset()
         original_state = np.copy(env.cube)
         
-        print(f"\n测试动作对: {pair['name']}")
+        # 保存初始状态
+        image_path = f"cube_images/reversibility/pair_{action}_initial.png"
+        print(f"\n测试动作对: {action_names[action]} 和 {action_names[action+1]}")
+        print(f"保存初始状态图像: {image_path}")
+        env.visualize_cube(save_path=image_path)
         
-        # 执行第一个动作
-        print(f"执行动作1: {pair['name'].split('&')[0].strip()}")
-        env.step(pair["actions"][0])
+        # 第一步：执行动作
+        print(f"Step 1: 执行动作 {action_names[action]}")
+        env.step(action)
         
         # 保存中间状态
-        env.visualize_cube(save_path=f"cube_images/reversibility/{pair['name'].split('&')[0].strip()}.png")
+        image_path = f"cube_images/reversibility/pair_{action}_after_first.png"
+        print(f"保存中间状态图像: {image_path}")
+        env.visualize_cube(save_path=image_path)
         
-        # 执行第二个动作
-        print(f"执行动作2: {pair['name'].split('&')[1].strip()}")
-        env.step(pair["actions"][1])
+        # 第二步：执行逆动作
+        print(f"Step 2: 执行逆动作 {action_names[action+1]}")
+        env.step(action + 1)
         
         # 保存最终状态
-        env.visualize_cube(save_path=f"cube_images/reversibility/{pair['name'].replace('&', 'and')}_final.png")
+        image_path = f"cube_images/reversibility/pair_{action}_after_both.png"
+        print(f"保存最终状态图像: {image_path}")
+        env.visualize_cube(save_path=image_path)
         
-        # 检查是否回到原始状态
-        is_same = np.array_equal(original_state, env.cube)
-        
+        # 验证是否恢复到原始状态
+        is_same = np.array_equal(env.cube, original_state)
         if is_same:
-            print(f"成功: {pair['name']} 是完全可逆的")
+            print(f"✓ 成功：{action_names[action]} 和 {action_names[action+1]} 是完美的逆操作对")
         else:
-            print(f"失败: {pair['name']} 不能完全还原原始状态")
-            mismatch_count = np.sum(original_state != env.cube)
-            print(f"不匹配的位置数量: {mismatch_count}/{env.cube.size}")
+            # 计算多少块不在原始位置
+            different_blocks = np.sum(env.cube != original_state)
+            total_blocks = env.cube.size
+            print(f"✗ 失败：{action_names[action]} 和 {action_names[action+1]} 未能恢复原始状态")
+            print(f"  {different_blocks}/{total_blocks} 个块不在原始位置 ({different_blocks/total_blocks*100:.1f}%)")
     
-    print("\n动作可逆性测试完成。图像已保存到 cube_images/reversibility 目录。")
+    print("\n可逆性测试完成。所有测试图像已保存到 cube_images/reversibility 目录。")
 
 def test_basic_actions():
-    """测试所有基本动作的正确性，包括F, F', B, B', L, L', R, R', U, U', D, D'"""
+    """测试所有基本魔方动作"""
+    print("\n===== 测试所有基本魔方动作 =====")
+    
+    # 创建输出目录
+    os.makedirs("cube_images/basic_actions", exist_ok=True)
+    
+    # 初始化环境
     env = RubiksCubeEnv(cube_size=3, scramble_moves=0, use_oll_pll=False, debug_mode=True)
     env.reset()
     
-    # 创建输出目录
-    os.makedirs("cube_images", exist_ok=True)
+    # 初始状态
+    print("保存初始状态图像...")
+    env.visualize_cube(save_path="cube_images/basic_actions/initial_state.png")
+    print("初始状态图像已保存到: cube_images/basic_actions/initial_state.png")
     
-    print("\n===== 测试所有基本动作 =====")
-    
-    # 动作映射: 0=F, 1=F', 2=B, 3=B', 4=L, 5=L', 6=R, 7=R', 8=U, 9=U', 10=D, 11=D'
+    # 定义动作映射
     action_names = ["F", "F'", "B", "B'", "L", "L'", "R", "R'", "U", "U'", "D", "D'"]
     
-    # 保存初始状态
-    print("初始状态 - 已解决的魔方")
-    env.visualize_cube(save_path="cube_images/initial_state.png")
-    
+    # 测试每个基本动作
     for action in range(12):
         # 重置魔方
         env.reset()
         
         # 执行动作
-        print(f"\n执行动作: {action_names[action]} (动作索引: {action})")
-        observation, reward, done, truncated, info = env.step(action)
-        
-        # 标准面索引: 0=U, 1=L, 2=F, 3=R, 4=B, 5=D
-        print(f"标准面索引: 0=上(U), 1=左(L), 2=前(F), 3=右(R), 4=后(B), 5=下(D)")
+        print(f"\n执行动作: {action_names[action]} (索引: {action})")
+        env.step(action)
         
         # 可视化动作后的魔方状态
         action_filename = action_names[action].replace("'", "p")
-        env.visualize_cube(save_path=f"cube_images/action_{action_filename}.png")
+        image_path = f"cube_images/basic_actions/action_{action_filename}.png"
+        print(f"保存动作后状态图像: {image_path}")
+        env.visualize_cube(save_path=image_path)
         
         # 检查动作后的状态
         is_first_two_layers_solved = env._check_first_two_layers_solved()
@@ -272,7 +292,7 @@ def test_basic_actions():
             actual_result = "前两层不变" if is_first_two_layers_solved else "前两层已改变"
             print(f"结果: {action_names[action]} 预期结果: {expected_result}, 实际结果: {actual_result}")
     
-    print("\n所有动作测试完成。图像已保存到 cube_images 目录。")
+    print("\n所有动作测试完成。图像已保存到 cube_images/basic_actions 目录。")
     
     # 测试动作的可逆性：执行动作然后执行其反向动作应该回到原始状态
     print("\n===== 测试动作的可逆性 =====")
@@ -283,27 +303,37 @@ def test_basic_actions():
         
         # 执行动作和其反向动作
         print(f"\n测试: {action_names[action]} + {action_names[action+1]}")
+        
+        # 执行第一个动作
+        print(f"第1步: 执行动作 {action_names[action]}")
         env.step(action)      # 执行动作
         
         # 保存中间状态
         action_filename = action_names[action].replace("'", "p")
-        env.visualize_cube(save_path=f"cube_images/reverse_test_{action_filename}_step1.png")
+        image_path = f"cube_images/basic_actions/reverse_test_{action_filename}_step1.png"
+        print(f"保存中间状态图像: {image_path}")
+        env.visualize_cube(save_path=image_path)
         
+        # 执行反向动作
+        print(f"第2步: 执行反向动作 {action_names[action+1]}")
         env.step(action + 1)  # 执行反向动作
         
         # 保存最终状态
-        env.visualize_cube(save_path=f"cube_images/reverse_test_{action_filename}_step2.png")
+        image_path = f"cube_images/basic_actions/reverse_test_{action_filename}_step2.png"
+        print(f"保存最终状态图像: {image_path}")
+        env.visualize_cube(save_path=image_path)
         
         # 检查是否回到原始状态
-        is_same = np.array_equal(original_state, env.cube)
-        if is_same:
-            print(f"成功: {action_names[action]} 和 {action_names[action+1]} 互为逆操作")
+        is_same = np.array_equal(env.cube, original_state)
+        if not is_same:
+            print(f"错误: {action_names[action]} + {action_names[action+1]} 未能恢复原始状态!")
+            # 计算有多少块不在正确位置
+            different_blocks = np.sum(env.cube != original_state)
+            print(f"有 {different_blocks} 个块不在正确位置。")
         else:
-            print(f"失败: {action_names[action]} 和 {action_names[action+1]} 不能正确还原")
-            
-            # 计算不匹配的位置数量
-            mismatch_count = np.sum(original_state != env.cube)
-            print(f"  不匹配的位置数量: {mismatch_count}/{env.cube.size}")
+            print(f"成功: {action_names[action]} + {action_names[action+1]} 正确恢复了原始状态。")
+    
+    print("\n可逆性测试完成。所有图像已保存到 cube_images/basic_actions 目录。")
 
 def test_specific_algorithm():
     """测试特定算法 - 顺时针旋转上层角块 (Sune)"""
@@ -385,8 +415,51 @@ def test_full_algorithm_visualization():
     
     print("\n完整算法测试完成。所有图像已保存到 cube_images/full_algorithm 目录。")
 
+def test_initial_state():
+    """详细测试魔方的初始状态"""
+    print("\n===== 测试魔方初始状态 =====")
+    
+    # 创建输出目录
+    os.makedirs("cube_images/initial_state", exist_ok=True)
+    
+    # 创建环境，确保不进行任何打乱
+    env = RubiksCubeEnv(cube_size=3, scramble_moves=0, use_oll_pll=False, debug_mode=True)
+    observation, info = env.reset()
+    
+    # 进一步确保我们在测试纯净的初始状态
+    env._reset_cube()
+    
+    # 详细打印魔方各面状态
+    print("魔方各面状态（应该每个面都只有一种颜色）:")
+    face_names = ["上(U)", "左(L)", "前(F)", "右(R)", "后(B)", "下(D)"]
+    
+    is_solved = True
+    for face_idx in range(6):
+        face = env.cube[face_idx]
+        expected_color = face_idx
+        print(f"\n{face_names[face_idx]}面 (期望值全为{expected_color}):")
+        print(face)
+        
+        # 检查该面是否所有块都是同一颜色
+        if not np.all(face == expected_color):
+            print(f"错误: {face_names[face_idx]}面有块不是正确颜色!")
+            is_solved = False
+    
+    # 可视化初始状态
+    env.visualize_cube(save_path="cube_images/initial_state/initial_state_detail.png")
+    
+    print(f"\n魔方初始状态是否正确还原: {is_solved}")
+    
+    if not is_solved:
+        print("\n注意: 魔方初始状态未正确还原，这可能导致所有其他测试失败。")
+        print("请检查rubiks_cube_env.py中的_reset_cube方法实现。")
+    else:
+        print("\n成功: 魔方初始状态已正确还原，每个面都有正确的颜色。")
+
 if __name__ == "__main__":
     # 运行测试
+    # 首先测试初始状态
+    test_initial_state()          # 测试初始状态详情
     test_visualize_magic_cube()    # 测试环境可视化
     test_check_first_two_layers()  # 测试前两层检查逻辑
     test_action_reversibility()    # 测试动作可逆性
