@@ -188,7 +188,7 @@ class RubiksCubeEnv(gym.Env):
                 self._apply_m_slice()
                 actions.append(12)  # M
             elif move == "M'":
-                self._apply_m_slice(reverse=True)
+                self._apply_m_slice()
                 actions.append(13)  # M'
             elif move in self.action_map:
                 action = self.action_map[move]
@@ -209,7 +209,7 @@ class RubiksCubeEnv(gym.Env):
                     
         return actions
     
-    def _apply_m_slice(self, reverse=False):
+    def _apply_m_slice(self):
         """应用M层（中间层）旋转
         
         M层是L和R之间的中间层，按照L的方向旋转
@@ -235,15 +235,6 @@ class RubiksCubeEnv(gym.Env):
                 strip = strip[::-1]
             strips.append(strip)
         
-        # 根据方向旋转
-        if not reverse:  # L方向 (逆时针看左面) - 默认
-            # 移动: 上 -> 前 -> 下 -> 后 -> 上
-            destination = [(2, mid_idx), (1, mid_idx), (3, mid_idx), (0, mid_idx)]
-        else:  # L'方向 (顺时针看左面)
-            # 移动: 上 -> 后 -> 下 -> 前 -> 上
-            destination = [(3, mid_idx), (1, mid_idx), (2, mid_idx), (0, mid_idx)]
-            # 翻转后面的条带
-            strips[3] = strips[3][::-1]
         
         # 应用旋转
         for i, (face, idx) in enumerate(destination):
@@ -334,36 +325,7 @@ class RubiksCubeEnv(gym.Env):
             
         return scramble_actions
     
-    def _reverse_algorithm(self, algorithm):
-        """
-        反转给定的算法字符串
-        例如: "R U R' U'" 会变成 "U R U' R'"
-        
-        规则:
-        1. 操作顺序反转
-        2. 每个操作取反：没有'的加上'，有'的去掉'
-        """
-        # 将算法拆分为单独的移动
-        moves = algorithm.split()
-        
-        # 反转移动顺序
-        moves.reverse()
-        
-        # 反转每个移动：没有'的加上'，有'的去掉'
-        reversed_moves = []
-        for move in moves:
-            if move.endswith("'"):
-                # 如果有'，去掉'
-                reversed_moves.append(move[:-1])
-            elif move.endswith("2"):
-                # 如果是2，保持不变（例如U2的反转还是U2）
-                reversed_moves.append(move)
-            else:
-                # 如果没有'，加上'
-                reversed_moves.append(move + "'")
-        
-        # 重新组合成字符串
-        return " ".join(reversed_moves)
+    
     
     def _scramble_cube(self):
         """打乱魔方，记录打乱步骤以便后续对比"""
