@@ -1,6 +1,6 @@
 import numpy as np
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import matplotlib.pyplot as plt
 from matplotlib import colors
 import matplotlib.patches as mpatches
@@ -176,7 +176,6 @@ class RubiksCubeEnv(gym.Env):
             print("前两层已成功解决!")
         return True
 
-    # 重新添加 _reverse_algorithm 函数
     def _reverse_algorithm(self, algorithm):
         """
         反转一个魔方算法字符串。
@@ -239,7 +238,6 @@ class RubiksCubeEnv(gym.Env):
             print("警告: M层旋转被跳过，因为它会影响前两层。")
         pass # 保持为空操作
     
-    # 修改 _random_last_layer_scramble 以使用逆算法
     def _random_last_layer_scramble(self, num_steps=2):
         """
         生成一个让"最后一层乱序、前两层保持还原"的打乱序列。
@@ -288,7 +286,7 @@ class RubiksCubeEnv(gym.Env):
                     alg_type = "PLL"
                 
                 # 获取该算法的 *逆算法*
-                reversed_alg = self._reverse_algorithm(alg) # 调用逆算法函数
+                reversed_alg = self._reverse_algorithm(alg)
                 current_applied_reverse_algs.append(f"Rev({alg_type}:{alg}) -> {reversed_alg}")
                 
                 # 解析并应用 *逆算法*
@@ -362,14 +360,9 @@ class RubiksCubeEnv(gym.Env):
                  if self.debug_mode: print(f"应用自定义算法: {self.custom_algorithm}")
                  # 注意：这里假设自定义算法是直接应用的，而不是逆算法
                  # 如果需要自定义算法也反转，需要额外逻辑
-                 # *** 如果希望自定义算法也应用逆算法，需要在这里调用 self._reverse_algorithm ***
-                 # 例如: reversed_custom_alg = self._reverse_algorithm(self.custom_algorithm)
-                 #       self.scramble_actions = self._parse_and_apply_algorithm(reversed_custom_alg)
-                 # 目前保持原样，直接应用自定义算法
                  self.scramble_actions = self._parse_and_apply_algorithm(self.custom_algorithm)
             elif isinstance(self.custom_algorithm, list):
                  if self.debug_mode: print(f"应用自定义动作列表: {[action_names[a] for a in self.custom_algorithm]}")
-                 # 动作列表通常是直接执行，不反转
                  for action in self.custom_algorithm:
                      if 0 <= action < 12:
                          self.scramble_actions.append(action)
@@ -402,7 +395,7 @@ class RubiksCubeEnv(gym.Env):
              self.scramble_actions = []
 
         # 最终验证 (如果进行了打乱)
-        if self.debug_mode and getattr(self, 'scramble_actions', None): # 检查属性是否存在
+        if self.debug_mode and self.scramble_actions:
              final_f2l_status = self._check_first_two_layers_solved()
              print(f"\n打乱完成后，前两层保持还原状态: {final_f2l_status}")
              
@@ -416,22 +409,70 @@ class RubiksCubeEnv(gym.Env):
              actions_str = " ".join([action_names[a] for a in self.scramble_actions])
              print(f"最终应用的动作序列: {actions_str}")
         
-        return getattr(self, 'scramble_actions', []) # 返回动作列表或空列表
-
-    # 更新 adjacent_faces 字典为最终确认的版本
+        return self.scramble_actions
+    
     def _apply_action(self, action):
         """应用动作到魔方状态 (核心旋转逻辑)"""
         action_to_face = {0: 2, 1: 2, 2: 4, 3: 4, 4: 1, 5: 1, 6: 3, 7: 3, 8: 0, 9: 0, 10: 5, 11: 5}
         direction = 1 if action % 2 == 0 else 3
         face = action_to_face[action]
         
-        # if self.debug_mode: # 在 _parse_and_apply_algorithm 中打印更清晰
-        #     face_names = "ULFRBD"; dir_name = "顺时针" if direction == 1 else "逆时针"
-        #     print(f"  执行旋转: {face_names[face]}({face}) {dir_name}")
+        if self.debug_mode:
+            face_names = "ULFRBD"; dir_name = "顺时针" if direction == 1 else "逆时针"
+            #print(f"  执行旋转: {face_names[face]}({face}) {dir_name}") # 在parse_and_apply中打印更清晰
 
         cube_copy = np.copy(self.cube)
         self.cube[face] = np.rot90(self.cube[face], k=direction)
         
+        adjacent_faces = {
+            0: [(2, 0, False), (3, 0, False), (4, 0, False), (1, 0, False)], # U -> F,R,B,L (顶行)
+            5: [(2, 2, False), (1, 2, False), (4, 2, False), (3, 2, False)], # D -> F,L,B,R (底行)
+            2: [(0, 2, False), (3, 0, True), (5, 0, False), (1, 2, True)],  # F -> U(底), R(左,rev), D(顶), L(右,rev) -- 修正: D(顶)不反转, L(右)反转
+            4: [(0, 0, False), (1, 0, True), (5, 2, True), (3, 2, False)], # B -> U(顶), L(左,rev), D(底,rev), R(右) -- 修正: U(顶)不反转, D(底)反转
+            1: [(0, 0, False), (4, 2, True), (5, 0, False), (2, 0, True)],  # L -> U(左), B(右,rev), D(左), F(左,rev) -- 修正: D(左)不反转
+            3: [(0, 2, False), (2, 2, True), (5, 2, False), (4, 0, True)]   # R -> U(右), F(右,rev), D(右), B(左,rev) -- 修正: D(右)不反转
+        }
+        # --- 再次仔细检查和修正 adjacent_faces ---
+        # F(2): 影响 U(0)底行， R(3)左列(需反转)， D(5)顶行(需反转)， L(1)右列(需反转)
+        # B(4): 影响 U(0)顶行， L(1)左列(需反转)， D(5)底行(需反转)， R(3)右列(需反转)
+        # L(1): 影响 U(0)左列， F(2)左列， D(5)左列， B(4)右列(需反转)
+        # R(3): 影响 U(0)右列， B(4)左列(需反转)， D(5)右列， F(2)右列
+        # 修正后的 adjacent_faces (基于标准视图和右手定则)
+        adjacent_faces = {
+             0: [(4, 0, False), (3, 0, False), (2, 0, False), (1, 0, False)], # U -> B, R, F, L (顶行, 逆时针看) - 修正顺序匹配顺时针旋转
+             5: [(1, 2, False), (2, 2, False), (3, 2, False), (4, 2, False)], # D -> L, F, R, B (底行, 逆时针看) - 修正顺序匹配顺时针旋转
+             2: [(0, 2, False), (3, 0, False), (5, 0, False), (1, 2, True)],  # F -> U(底), R(左), D(顶), L(右, rev)
+             4: [(0, 0, False), (1, 0, False), (5, 2, False), (3, 2, True)],  # B -> U(顶), L(左), D(底), R(右, rev)
+             1: [(0, 0, False), (2, 0, False), (5, 0, False), (4, 2, True)],  # L -> U(左), F(左), D(左), B(右, rev)
+             3: [(0, 2, False), (4, 0, True), (5, 2, False), (2, 2, False)]   # R -> U(右), B(左, rev), D(右), F(右)
+        }
+        # --- 最终确认 adjacent_faces (再次核对常见资料) ---
+        # U(0): B(4,0), R(3,0), F(2,0), L(1,0) -> OK
+        # D(5): L(1,2), F(2,2), R(3,2), B(4,2) -> OK
+        # F(2): U(0,2), R(3,:,0), D(5,0), L(1,:,2) -> R列需要从上到下读，所以L列也是。D行需反转，L列需反转?
+        #       标准操作: U底->R左, R左->D顶, D顶->L右, L右->U底
+        #       U底行 -> R左列 (方向OK)
+        #       R左列 -> D顶行 (方向OK, 但D顶行需反转?)
+        #       D顶行 -> L右列 (方向OK, 但L右列需反转?)
+        #       L右列 -> U底行 (方向OK?)
+        # 让我们遵循维基百科或类似来源的精确映射:
+        # F: U(2,:) -> R(:,0); R(:,0) -> D(0,:); D(0,:) -> L(:,2); L(:,2) -> U(2,:)
+        #    Indices: U(0,2,:), R(3,:,0), D(5,0,:), L(1,:,2)
+        #    Need reversal? R(3,:,0) NO, D(5,0,:) YES, L(1,:,2) YES?
+        # F: [(0, 2, False), (3, 0, False), (5, 0, True), (1, 2, True)] # 假设D顶行反转, L右列反转
+        # B: U(0,:) -> L(:,0); L(:,0) -> D(2,:); D(2,:) -> R(:,2); R(:,2) -> U(0,:)
+        #    Indices: U(0,0,:), L(1,:,0), D(5,2,:), R(3,:,2)
+        #    Need reversal? L(1,:,0) YES, D(5,2,:) YES, R(3,:,2) NO?
+        # B: [(0, 0, False), (1, 0, True), (5, 2, True), (3, 2, False)] # 假设L左列反转, D底行反转
+        # L: U(:,0) -> F(:,0); F(:,0) -> D(:,0); D(:,0) -> B(:,2); B(:,2) -> U(:,0)
+        #    Indices: U(0,:,0), F(2,:,0), D(5,:,0), B(4,:,2)
+        #    Need reversal? F(2,:,0) NO, D(5,:,0) NO, B(4,:,2) YES?
+        # L: [(0, 0, False), (2, 0, False), (5, 0, False), (4, 2, True)] # 假设B右列反转
+        # R: U(:,2) -> B(:,0); B(:,0) -> D(:,2); D(:,2) -> F(:,2); F(:,2) -> U(:,2)
+        #    Indices: U(0,:,2), B(4,:,0), D(5,:,2), F(2,:,2)
+        #    Need reversal? B(4,:,0) YES, D(5,:,2) NO, F(2,:,2) NO?
+        # R: [(0, 2, False), (4, 0, True), (5, 2, False), (2, 2, False)] # 假设B左列反转
+
         # 使用最终确认的 adjacent_faces
         adjacent_faces = {
              0: [(4, 0, False), (3, 0, False), (2, 0, False), (1, 0, False)], # U -> B,R,F,L (顶行)
@@ -442,69 +483,60 @@ class RubiksCubeEnv(gym.Env):
              3: [(0, 2, False), (4, 0, True),  (5, 2, False), (2, 2, False)]  # R -> U(右), B(左,rev), D(右), F(右)
         }
 
-        adj_faces_list = adjacent_faces[face]
+        adj_faces = adjacent_faces[face]
         strips = []
-        for adj_face, idx_spec, rev in adj_faces_list:
-            # 确定是影响行还是列，以及具体的索引
-            # U/D面旋转: 影响侧面的行 (idx_spec 是行号 0 或 2)
-            # F/B面旋转: 影响U/D的行 (idx_spec 是行号 0 或 2), L/R的列 (idx_spec 是列号 0 或 2)
-            # L/R面旋转: 影响U/D的列 (idx_spec 是列号 0 或 2), F/B的列 (idx_spec 是列号 0 或 2)
+        for adj_face, idx_spec, rev in adj_faces:
+            if isinstance(idx_spec, int): # 行或列索引
+                is_row = (face in [0, 5]) or (adj_face in [0, 5]) # 粗略判断是行还是列
+                if face in [2, 4]: is_row = (adj_face in [0, 5])
+                if face in [1, 3]: is_row = False # L/R 旋转侧面总是影响列
 
-            # 一个更通用的判断方法
-            is_row_affected = False
-            col_idx = -1
-            row_idx = -1
-
-            if face in [0, 5]: # U/D 转动
-                 is_row_affected = True
-                 row_idx = idx_spec
-            elif face in [2, 4]: # F/B 转动
-                 if adj_face in [0, 5]: # 影响 U/D 的行
-                     is_row_affected = True
-                     row_idx = idx_spec
-                 else: # 影响 L/R 的列
-                     is_row_affected = False
-                     col_idx = idx_spec
-            elif face in [1, 3]: # L/R 转动
-                 is_row_affected = False # L/R 转动总是影响列
-                 col_idx = idx_spec
-
-            if is_row_affected:
-                strip = cube_copy[adj_face, row_idx, :].copy()
-            else:
-                strip = cube_copy[adj_face, :, col_idx].copy()
+                if is_row:
+                    strip = cube_copy[adj_face, idx_spec, :].copy()
+                else:
+                    strip = cube_copy[adj_face, :, idx_spec].copy()
+            else: # 应该是切片 (未在此版本中使用，保持简单)
+                 continue # 跳过
 
             if rev:
                 strip = strip[::-1]
             strips.append(strip)
         
-        # 调整条带顺序
         if direction == 1: # 顺时针
             strips = [strips[-1]] + strips[:-1]
         else: # 逆时针
             strips = strips[1:] + [strips[0]]
         
-        # 应用旋转到相邻面
-        for i, (adj_face, idx_spec, rev) in enumerate(adj_faces_list):
+        for i, (adj_face, idx_spec, rev) in enumerate(adj_faces):
             strip = strips[i]
             if rev:
                 strip = strip[::-1]
 
-            # 同样的逻辑判断是应用到行还是列
-            is_row_affected = False
-            col_idx = -1
-            row_idx = -1
-            if face in [0, 5]: is_row_affected = True; row_idx = idx_spec
-            elif face in [2, 4]: 
-                 if adj_face in [0, 5]: is_row_affected = True; row_idx = idx_spec
-                 else: is_row_affected = False; col_idx = idx_spec
-            elif face in [1, 3]: is_row_affected = False; col_idx = idx_spec
+            if isinstance(idx_spec, int):
+                is_row = (face in [0, 5]) or (adj_face in [0, 5])
+                if face in [2, 4]: is_row = (adj_face in [0, 5])
+                if face in [1, 3]: is_row = False
 
-            if is_row_affected:
-                self.cube[adj_face, row_idx, :] = strip
+                if is_row:
+                    self.cube[adj_face, idx_spec, :] = strip
+                else:
+                    self.cube[adj_face, :, idx_spec] = strip
             else:
-                self.cube[adj_face, :, col_idx] = strip
-                
+                 continue # 跳过
+
+        # # 调试：检查逆操作是否恢复原状 (可选)
+        # if self.debug_mode and action % 2 == 0:
+        #     inv_action = action + 1
+        #     temp_cube_before_inv = np.copy(self.cube)
+        #     self._apply_action(inv_action) # 应用逆动作
+        #     if not np.array_equal(self.cube, cube_copy):
+        #          print(f"错误: 动作 {action} 和其逆动作 {inv_action} 不可逆!")
+        #          # 可以选择恢复到应用逆操作前的状态
+        #          self.cube = temp_cube_before_inv
+        #     else:
+        #          # 测试通过，需要恢复到原状态（应用正向动作后的状态）
+        #          self.cube = temp_cube_before_inv
+        #          if self.debug_mode: print(f"动作 {action} 与逆动作 {inv_action} 可逆性验证通过。")
         return
     
     def is_solved(self):
@@ -522,9 +554,7 @@ class RubiksCubeEnv(gym.Env):
         normalized_reward = correct_pieces / total_pieces
         step_penalty = self.steps / self.max_steps * 0.1 # 轻微步数惩罚
         reward = normalized_reward - step_penalty
-        # 记录最佳奖励 (可选)
-        # if reward > getattr(self, 'best_reward', -np.inf):
-        #     self.best_reward = reward
+        if reward > self.best_reward: self.best_reward = reward
         return reward
     
     def reset(self, seed=None, options=None):
@@ -536,7 +566,7 @@ class RubiksCubeEnv(gym.Env):
         self._scramble_cube() 
         
         self.steps = 0
-        self.best_reward = -np.inf # 重置最佳奖励
+        self.best_reward = -np.inf
         observation = self.cube.copy()
         info = {"scramble_actions": getattr(self, 'scramble_actions', [])} # 确保scramble_actions存在
         if self.render_mode == "human": self._render_frame()
@@ -550,11 +580,7 @@ class RubiksCubeEnv(gym.Env):
         reward = self._get_reward()
         terminated = self.is_solved()
         truncated = self.steps >= self.max_steps
-        # 更新最佳奖励
-        current_best = getattr(self, 'best_reward', -np.inf)
-        if reward > current_best:
-             self.best_reward = reward
-        info = {"steps": self.steps, "best_reward": getattr(self, 'best_reward', -np.inf), "solved": terminated}
+        info = {"steps": self.steps, "best_reward": self.best_reward, "solved": terminated}
         if self.render_mode == "human": self._render_frame()
         return observation, reward, terminated, truncated, info
     
@@ -570,9 +596,10 @@ class RubiksCubeEnv(gym.Env):
         if self.render_mode not in ["human", "rgb_array"]: return
         
         # 标准面索引: 0=U(白), 1=L(橙), 2=F(绿), 3=R(红), 4=B(蓝), 5=D(黄)
+        # 面名称映射到索引
         face_name_to_idx = {'Up': 0, 'Left': 1, 'Front': 2, 'Right': 3, 'Back': 4, 'Down': 5}
         
-        if self.fig is None or self.axs is None or not plt.fignum_exists(self.fig.number): # 检查窗口是否已关闭
+        if self.fig is None or self.axs is None:
             # 调整布局以匹配常见魔方展开图 (十字形)
             self.fig, self.axs = plt.subplots(3, 4, figsize=(12, 9))
             plt.subplots_adjust(wspace=0.1, hspace=0.1)
@@ -611,6 +638,12 @@ class RubiksCubeEnv(gym.Env):
             face_names_list = ['Up(0)', 'Left(1)', 'Front(2)', 'Right(3)', 'Back(4)', 'Down(5)']
             ax.set_title(face_names_list[face_idx], fontsize=10)
 
+            # # 在每个方块中央显示颜色代码 (调试用)
+            # for y in range(self.cube_size):
+            #     for x in range(self.cube_size):
+            #         color_idx = face_data[y, x]
+            #         ax.text(x, y, str(color_idx), ha="center", va="center", fontsize=8, color='black' if color_idx != 5 else 'white')
+
         plt.suptitle(f"Steps: {self.steps}, Solved: {self.is_solved()}", fontsize=14)
         plt.draw()
         plt.pause(0.01) # 暂停一小段时间以便显示更新
@@ -630,10 +663,9 @@ class RubiksCubeEnv(gym.Env):
         FACE_NAMES_CN = {0: '上(U)', 1: '左(L)', 2: '前(F)', 3: '右(R)', 4: '后(B)', 5: '下(D)'}
         COLOR_NAMES_CN = {0: '白', 1: '橙', 2: '绿', 3: '红', 4: '蓝', 5: '黄'}
 
-        # 创建一个新的 figure 和 axes
-        fig_vis, ax_vis = plt.subplots(figsize=(10, 8)) # 使用不同的变量名避免冲突
-        ax_vis.set_axis_off()
-        ax_vis.set_xlim(0, 12); ax_vis.set_ylim(0, 9)
+        fig, ax = plt.subplots(figsize=(10, 8))
+        ax.set_axis_off()
+        ax.set_xlim(0, 12); ax.set_ylim(0, 9)
 
         # 十字展开图位置
         face_positions = {'Up': (3, 6), 'Left': (0, 3), 'Front': (3, 3), 
@@ -642,7 +674,7 @@ class RubiksCubeEnv(gym.Env):
 
         for face_name, (x_pos, y_pos) in face_positions.items():
             face_idx = face_indices[face_name]
-            ax_vis.text(x_pos + 1.5, y_pos + 3.2, f"{face_name} ({FACE_NAMES_CN[face_idx]})", ha='center', fontsize=12)
+            ax.text(x_pos + 1.5, y_pos + 3.2, f"{face_name} ({FACE_NAMES_CN[face_idx]})", ha='center', fontsize=12)
             
             for row in range(3):
                 for col in range(3):
@@ -650,12 +682,16 @@ class RubiksCubeEnv(gym.Env):
                     color = CUBE_COLORS[color_idx]
                     rect = Rectangle((x_pos + col, y_pos + (2 - row)), 1, 1, 
                                      facecolor=color, edgecolor='black', linewidth=1.5)
-                    ax_vis.add_patch(rect)
+                    ax.add_patch(rect)
+                    # # 显示颜色中文名 (可选)
+                    # ax.text(x_pos + col + 0.5, y_pos + (2 - row) + 0.5, 
+                    #        f"{COLOR_NAMES_CN[color_idx]}",
+                    #        ha='center', va='center', fontsize=9, color='black' if color_idx != 5 else 'white') # 黄色用白色字
 
         legend_elements = [Rectangle((0, 0), 1, 1, facecolor=color, edgecolor='black', 
                                      label=f"{idx}: {color} ({COLOR_NAMES_CN[idx]})")
                            for idx, color in CUBE_COLORS.items()]
-        ax_vis.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=3, title="颜色表")
+        ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=3, title="颜色表")
         
         plt.tight_layout(rect=[0, 0.05, 1, 0.95]) # 调整布局防止图例重叠
         title = f"魔方状态 - 步数: {self.steps}, 是否解决: {self.is_solved()}"
@@ -666,17 +702,19 @@ class RubiksCubeEnv(gym.Env):
             plt.savefig(save_path)
             if self.debug_mode: print(f"图像已保存到: {save_path}")
             
-        plt.close(fig_vis) # 关闭这个临时的 figure
+        plt.close(fig) # 关闭图形，释放内存
 
         # 输出魔方状态信息（便于调试）
         if self.debug_mode: self._print_cube_state()
         
+        # 注意：此函数现在不返回fig对象，如果需要请修改
+    
     def close(self):
         """关闭环境"""
-        if self.fig is not None and plt.fignum_exists(self.fig.number):
+        if self.fig is not None:
             plt.close(self.fig)
-        self.fig = None
-        self.axs = None
+            self.fig = None
+            self.axs = None
 
     def _print_cube_state(self):
         """打印当前魔方状态，便于调试"""
@@ -696,32 +734,11 @@ class RubiksCubeEnv(gym.Env):
                 
         solved = self.is_solved()
         print(f"\n魔方是否已解决: {solved}")
-        # f2l_solved = self._check_first_two_layers_solved() # 在check函数内部已有打印
+        f2l_solved = self._check_first_two_layers_solved() # 调用检查函数
+        # print(f"前两层是否已解决: {f2l_solved}") # 在check函数内部已有打印
 
         correct_pieces = 0; total_pieces = 54
         for i in range(6): correct_pieces += np.sum(self.cube[i] == i)
         percentage = (correct_pieces / total_pieces) * 100
         print(f"正确位置块数: {correct_pieces}/{total_pieces} ({percentage:.1f}%)")
         print("--------------------\n")
-
-# # Example usage (if run directly)
-# if __name__ == '__main__':
-#     env = RubiksCubeEnv(debug_mode=True, use_oll_pll=True, scramble_moves=0)
-#     obs, info = env.reset()
-#     env.visualize_cube(save_path="cube_images/reset_test/initial_scrambled.png")
-
-#     # Test a reverse algorithm manually
-#     test_alg = env.oll_algs[0] # "R U2 R' U' R U' R'"
-#     rev_test_alg = env._reverse_algorithm(test_alg)
-#     print(f"Testing reverse of {test_alg}: {rev_test_alg}")
-    
-#     env._reset_cube() # Start from solved
-#     print("Applying reverse algorithm...")
-#     actions = env._parse_and_apply_algorithm(rev_test_alg)
-#     print(f"Applied actions: {actions}")
-    
-#     env.visualize_cube(save_path="cube_images/reset_test/after_reverse_alg.png")
-#     f2l_ok = env._check_first_two_layers_solved()
-#     print(f"F2L solved after reverse alg? {f2l_ok}")
-
-#     env.close() 

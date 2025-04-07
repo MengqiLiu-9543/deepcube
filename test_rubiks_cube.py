@@ -115,13 +115,47 @@ def test_scramble_modes():
     print("\n使用10个随机动作打乱:")
     env.visualize_cube(save_path="cube_images/scramble_modes/random_10moves.png")
     
-    # 测试3: OLL/PLL算法打乱
-    env = RubiksCubeEnv(cube_size=3, scramble_moves=0, use_oll_pll=True, debug_mode=True)
-    env.reset()
-    print("\n使用OLL/PLL算法打乱:")
-    env.visualize_cube(save_path="cube_images/scramble_modes/oll_pll.png")
+    # 测试3: OLL/PLL算法打乱（使用自定义算法）
+    # 定义几种常用OLL/PLL算法
+    oll_pll_algorithms = [
+        {"name": "Sune (OLL)", "notation": "R U R' U R U2 R'", "moves": [6, 8, 7, 8, 6, 8, 8, 7]},
+        {"name": "Anti-Sune (OLL)", "notation": "R' U' R U' R' U2 R", "moves": [7, 9, 6, 9, 7, 8, 8, 6]},
+        {"name": "F R U R' U' F' (OLL)", "notation": "F R U R' U' F'", "moves": [0, 6, 8, 7, 9, 1]},
+        {"name": "T-Perm (PLL)", "notation": "R U R' U' R' F R2 U' R' U' R U R' F'", "moves": [6, 8, 7, 9, 7, 0, 6, 6, 9, 7, 9, 6, 8, 7, 1]}
+    ]
     
-    # 测试4: 不打乱
+    # 选择要使用的算法
+    selected_alg_idx = 2  # 选择F R U R' U' F'算法
+    selected_alg = oll_pll_algorithms[selected_alg_idx]
+    
+    # 使用选定算法
+    env = RubiksCubeEnv(
+        cube_size=3, 
+        scramble_moves=0,  # 这里设置为0，因为我们使用自定义算法
+        use_oll_pll=True, 
+        debug_mode=True,
+        custom_algorithm=selected_alg["moves"]  # 使用动作列表
+    )
+    env.reset()
+    
+    print(f"\n使用{selected_alg['name']}算法打乱（{selected_alg['notation']}, {len(selected_alg['moves'])}步）:")
+    env.visualize_cube(save_path=f"cube_images/scramble_modes/oll_pll_{selected_alg_idx}.png")
+    
+    # 测试4: 使用字符串格式的自定义算法
+    string_algorithm = "R U R' U R U2 R'"  # Sune算法
+    env = RubiksCubeEnv(
+        cube_size=3,
+        scramble_moves=0,
+        use_oll_pll=True,
+        debug_mode=True,
+        custom_algorithm=string_algorithm  # 使用字符串格式
+    )
+    env.reset()
+    
+    print(f"\n使用字符串格式的Sune算法打乱（{string_algorithm}）:")
+    env.visualize_cube(save_path="cube_images/scramble_modes/string_algorithm.png")
+    
+    # 测试5: 不打乱
     env = RubiksCubeEnv(cube_size=3, scramble_moves=0, use_oll_pll=False, debug_mode=True)
     env.reset()
     print("\n不打乱魔方:")
