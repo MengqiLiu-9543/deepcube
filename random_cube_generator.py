@@ -1,19 +1,20 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-此文件存储了 57 个 OLL 算法和 21 个 PLL 算法（均为具体魔方转动指令），
-并提供一个函数 generate_oll_pll() 用于随机生成一个 OLL+PLL 的公式组合。
+This file contains 57 OLL algorithms and 21 PLL algorithms (all concrete cube rotation instructions),
+and provides a function generate_oll_pll() to randomly generate an OLL+PLL formula combination.
 
-生成规则：
-  - 75% 概率同时选取一个 OLL 算法和一个 PLL 算法（中间以空格分隔）
-  - 25% 概率只选取一个公式（在 OLL 和 PLL 中各半概率）
+Generation rules:
+  - 75% chance to select both an OLL algorithm and a PLL algorithm (separated by space)
+  - 25% chance to select only one formula (equal probability between OLL and PLL)
 
-算法数据参考自常见 CFOP 方法资料，如需调整请自行替换。
+Algorithm data referenced from common CFOP method materials, adjust as needed.
 """
 
 import random
 
-#OLL 算法
+# OLL algorithms
 OLL_ALGORITHMS = [
     "R U R' U' R U' R' F' U' F R U R'",
     "F R' F R2 U' R' U' R U R' F2",
@@ -48,10 +49,9 @@ OLL_ALGORITHMS = [
     "F R U R' U' F'",
     "L' U' L U' L' U L U L F' L' F",
     "R U R' U R U' R' U' R' F R F'",
-
 ]
 
-# PLL 
+# PLL algorithms
 PLL_ALGORITHMS = [
     "F R U' R' U' R U R' F' R U R' U' R' F R F'",
     "R U R' U' R' F R2 U' R' U' R U R' F'",
@@ -70,14 +70,14 @@ PLL_ALGORITHMS = [
 
 def generate_oll_pll():
     """
-    随机生成公式：
-      - 75% 概率同时选择一个 OLL 和一个 PLL 算法，拼接为一个组合公式
-      - 25% 概率只选择单个算法（在 OLL 与 PLL 中各半概率）
-    返回生成的公式字符串。
+    Randomly generate formula:
+      - 75% chance to combine one OLL and one PLL algorithm
+      - 25% chance to select single algorithm (equal probability between OLL and PLL)
+    Returns the generated formula string.
     """
     x = random.random()
     if x < 0.25:
-        # 只生成一个公式
+        # Generate single formula
         if random.random() < 0.5:
             formula = random.choice(OLL_ALGORITHMS)
         else:
@@ -97,7 +97,7 @@ def generate_oll_pll():
 
 def main():
     result = generate_oll_pll()
-    print("生成的 OLL+PLL 公式为:")
+    print("Generated OLL+PLL formula:")
     print(result)
 
 
