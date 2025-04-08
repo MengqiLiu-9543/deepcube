@@ -100,10 +100,21 @@ class SimpleRubiksCube:
             else:
                 self.cube[adj_face, :, pos] = strip
 
+    def convert_prime_move(self, move):
+        """
+        将带'的操作转换为执行3次基本操作
+        """
+        if len(move) == 2 and move[1] == "'":
+            base = move[0]
+            if base in "RULDF":
+                return [base] * 3
+        return [move]
+
     def apply_algorithm(self, algorithm_str):
         """
         根据空格分隔的公式字符串依次应用动作，
         支持类似 "R U R' U'" 以及 "R2"（代表执行两次 R 动作）的写法。
+        对于R、U、L、D、F的反向操作('），会转换为执行3次基本操作。
         """
         moves = algorithm_str.split()
         for move in moves:
@@ -112,7 +123,9 @@ class SimpleRubiksCube:
                 self.apply_move(base)
                 self.apply_move(base)
             else:
-                self.apply_move(move)
+                converted_moves = self.convert_prime_move(move)
+                for m in converted_moves:
+                    self.apply_move(m)
 
     def get_cube(self):
         return self.cube
@@ -146,7 +159,7 @@ def main():
     # 创建魔方实例（初始为已解决状态）
     cube = SimpleRubiksCube()
     # 定义打乱公式，例如 "R U R' U'"
-    algorithm = "R U"
+    algorithm = "R U'"
     print("应用公式:", algorithm)
     cube.apply_algorithm(algorithm)
 
