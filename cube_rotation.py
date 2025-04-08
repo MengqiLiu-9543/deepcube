@@ -86,12 +86,12 @@ class RubikCube:
     def D(self):
         """下层顺时针转动"""
         self.faces['D'] = rotate_face(self.faces['D'])
-        # D 层相邻于 F, R, B, L 四个面的底行
+        # D 层相邻于 F, L, B, R 四个面的底行
         temp = self.faces['F'][2][:]
-        self.faces['F'][2] = self.faces['R'][2][:]
-        self.faces['R'][2] = self.faces['B'][2][:]
-        self.faces['B'][2] = self.faces['L'][2][:]
-        self.faces['L'][2] = temp
+        self.faces['F'][2] = self.faces['L'][2][:]
+        self.faces['L'][2] = self.faces['B'][2][:]
+        self.faces['B'][2] = self.faces['R'][2][:]
+        self.faces['R'][2] = temp
 
     def F(self):
         """前面顺时针转动"""
