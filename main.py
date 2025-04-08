@@ -118,10 +118,10 @@ def plot_cube(cube, save_path="scrambled_cube.png"):
     使用matplotlib将魔方的六个面绘制到一个 2x3 的子图中，
     并保存为PNG图片。
     """
-    # 定义面名顺序：依据初始化顺序 0: 上, 1: 左, 2: 前, 3: 右, 4: 后, 5: 下
+    # 定义面名顺序（国际标准配色）：0: 上(白), 1: 左(绿), 2: 前(红), 3: 右(蓝), 4: 后(橙), 5: 下(黄)
     face_names = ["Up", "Left", "Front", "Right", "Back", "Down"]
-    # 定义颜色映射（与魔方状态数值对应）
-    cmap = colors.ListedColormap(['white', 'yellow', 'red', 'orange', 'green', 'blue'])
+    # 定义颜色映射（国际标准配色：上白、下黄、前红、右蓝、后橙、左绿）
+    cmap = colors.ListedColormap(['white', 'green', 'red', 'blue', 'orange', 'yellow'])
 
     fig, axs = plt.subplots(2, 3, figsize=(8, 6))
     axs = axs.flatten()
