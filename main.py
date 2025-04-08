@@ -41,8 +41,12 @@ class SimpleRubiksCube:
             8: 0, 9: 0,    # U, U' -> 上面(0)
             10: 5, 11: 5   # D, D' -> 下面(5)
         }
-        # 约定：偶数动作用顺时针旋转90°（np.rot90中 k=1），奇数动作用逆时针旋转90°（k=3）
-        direction = 1 if action % 2 == 0 else 3
+        # 约定：偶数动作用顺时针旋转90°（np.rot90中 k=3），奇数动作用逆时针旋转90°（k=1）
+        # 对于上面(U)和下面(D)的操作，方向需要反过来
+        if face_idx in [0, 5]:  # 上面和下面
+            direction = 3 if action % 2 == 0 else 1
+        else:  # 其他面
+            direction = 1 if action % 2 == 0 else 3
         face_idx = action_to_face[action]
 
         # 旋转该面
