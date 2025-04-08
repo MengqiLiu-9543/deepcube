@@ -41,12 +41,8 @@ class SimpleRubiksCube:
             8: 0, 9: 0,    # U, U' -> 上面(0)
             10: 5, 11: 5   # D, D' -> 下面(5)
         }
-        # 约定：对于L和R动作，偶数是顺时针（k=1），奇数是逆时针（k=3）
-        # 其他动作则相反
-        if action in [4, 5, 6, 7]:  # L, L', R, R'
-            direction = 1 if action % 2 == 0 else 3
-        else:
-            direction = 3 if action % 2 == 0 else 1
+        # 约定：偶数动作用顺时针旋转90°（np.rot90中 k=1），奇数动作用逆时针旋转90°（k=3）
+        direction = 1 if action % 2 == 0 else 3
         face_idx = action_to_face[action]
 
         # 旋转该面
@@ -59,14 +55,14 @@ class SimpleRubiksCube:
             0: [(2, 0, False), (3, 0, False), (4, 0, False), (1, 0, False)],
             # 下面 (5)旋转影响：前(2)、左(1)、后(4)、右(3) 的底行
             5: [(2, 2, False), (1, 2, False), (4, 2, False), (3, 2, False)],
-            # 前面 (2)旋转影响：上(0)的底行、左(1)的右列、下(5)的顶行、右(3)的左列
-            2: [(0, 2, False), (1, 2, True), (5, 0, True), (3, 0, False)],
-            # 后面 (4)旋转影响：上(0)的顶行、左(1)的左列、下(5)的底行、右(3)的右列
-            4: [(0, 0, True), (1, 0, True), (5, 2, False), (3, 2, False)],
-            # 左面 (1)旋转影响：上(0)的左列、前(2)的左列、下(5)的左列、后(4)的右列
-            1: [(0, 0, False), (2, 0, False), (5, 0, False), (4, 2, True)],
-            # 右面 (3)旋转影响：前(2)的右列、下(5)的右列、后(4)的左列、上(0)的右列
-            3: [(2, 2, False), (5, 2, False), (4, 0, True), (0, 2, False)]
+            # 前面 (2)旋转影响：上(0)的底行、右(3)的左列（需反转）、下(5)的顶行（需反转）、左(1)的右列
+            2: [(0, 2, False), (3, 0, True), (5, 0, True), (1, 2, False)],
+            # 后面 (4)旋转影响：上(0)的顶行（需反转）、左(1)的左列、下(5)的底行、右(3)的右列（需反转）
+            4: [(0, 0, True), (1, 0, False), (5, 2, False), (3, 2, True)],
+            # 左面 (1)旋转影响：上(0)的左列、前(2)的左列、下(5)的左列（需反转）、后(4)的右列（需反转）
+            1: [(0, 0, False), (2, 0, False), (5, 0, True), (4, 2, True)],
+            # 右面 (3)旋转影响：上(0)的右列（需反转）、后(4)的左列（需反转）、下(5)的右列、前(2)的右列
+            3: [(0, 2, True), (4, 0, True), (5, 2, False), (2, 2, False)]
         }
         if face_idx not in adjacent_faces:
             return
@@ -100,21 +96,10 @@ class SimpleRubiksCube:
             else:
                 self.cube[adj_face, :, pos] = strip
 
-    def convert_prime_move(self, move):
-        """
-        将带'的操作转换为执行3次基本操作
-        """
-        if len(move) == 2 and move[1] == "'":
-            base = move[0]
-            if base in "RULDF":
-                return [base] * 3
-        return [move]
-
     def apply_algorithm(self, algorithm_str):
         """
         根据空格分隔的公式字符串依次应用动作，
         支持类似 "R U R' U'" 以及 "R2"（代表执行两次 R 动作）的写法。
-        对于R、U、L、D、F的反向操作('），会转换为执行3次基本操作。
         """
         moves = algorithm_str.split()
         for move in moves:
@@ -123,9 +108,7 @@ class SimpleRubiksCube:
                 self.apply_move(base)
                 self.apply_move(base)
             else:
-                converted_moves = self.convert_prime_move(move)
-                for m in converted_moves:
-                    self.apply_move(m)
+                self.apply_move(move)
 
     def get_cube(self):
         return self.cube
@@ -137,8 +120,8 @@ def plot_cube(cube, save_path="scrambled_cube.png"):
     """
     # 定义面名顺序：依据初始化顺序 0: 上, 1: 左, 2: 前, 3: 右, 4: 后, 5: 下
     face_names = ["Up", "Left", "Front", "Right", "Back", "Down"]
-    # 定义颜色映射（与魔方状态数值对应：0上白、1左绿、2前红、3右蓝、4后橙、5下黄）
-    cmap = colors.ListedColormap(['white', 'green', 'red', 'blue', 'orange', 'yellow'])
+    # 定义颜色映射（与魔方状态数值对应）
+    cmap = colors.ListedColormap(['white', 'yellow', 'red', 'orange', 'green', 'blue'])
 
     fig, axs = plt.subplots(2, 3, figsize=(8, 6))
     axs = axs.flatten()
@@ -159,7 +142,7 @@ def main():
     # 创建魔方实例（初始为已解决状态）
     cube = SimpleRubiksCube()
     # 定义打乱公式，例如 "R U R' U'"
-    algorithm = "U R"
+    algorithm = "R U R' U'"
     print("应用公式:", algorithm)
     cube.apply_algorithm(algorithm)
 
