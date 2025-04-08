@@ -229,8 +229,8 @@ def draw_cube(cube, filename="rubik_cube.png"):
 
 def main():
     cube = RubikCube()
-    # scramble = generate_oll_pll()
-    scramble = "B"
+    scramble = generate_oll_pll()
+    # scramble = "B"
     moves = scramble.split()
     for move in moves:
         cube.move(move)
