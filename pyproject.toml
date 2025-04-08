@@ -7,4 +7,5 @@ requires-python = ">=3.11"
 dependencies = [
     "matplotlib>=3.10.1",
     "numpy>=2.2.4",
+    "pycuber>=0.2.2",
 ]

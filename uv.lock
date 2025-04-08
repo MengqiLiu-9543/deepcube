@@ -310,6 +310,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pycuber"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a5/65/9be8116ab862d03ef4f079c71198b24471c06c974983d3352421e50ff5b5/pycuber-0.2.2.tar.gz", hash = "sha256:ca7721a559fb1dc77c2a63b82cec39aef158c2f1a3ff7c6ede713e2de522a444", size = 18644 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/32/fe85b9038355d0d7920fb7e88b3e1756fbea9949f6e0bdc9401fdb2a92d6/pycuber-0.2.2-py3-none-any.whl", hash = "sha256:081ad3e965667a101e7057d77904cb22d8f6ec1f50c19cf05fe7e66354049a73", size = 23830 },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -337,12 +346,14 @@ source = { virtual = "." }
 dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
+    { name = "pycuber" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "numpy", specifier = ">=2.2.4" },
+    { name = "pycuber", specifier = ">=0.2.2" },
 ]
 
 [[package]]
