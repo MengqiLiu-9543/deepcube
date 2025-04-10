@@ -1,0 +1,55 @@
+~/workspace$ python cube_trainer.py --mode solve_custom --custom_scramble "R U R' U'"
+2025-04-10 01:33:18.947750: I external/local_xla/xla/tsl/cuda/cudart_stub.cc:32] Could not find cuda drivers on your machine, GPU will not be used.
+2025-04-10 01:33:18.951313: I external/local_xla/xla/tsl/cuda/cudart_stub.cc:32] Could not find cuda drivers on your machine, GPU will not be used.
+2025-04-10 01:33:18.959063: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:467] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1744248798.972180    1007 cuda_dnn.cc:8579] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1744248798.975889    1007 cuda_blas.cc:1407] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+W0000 00:00:1744248798.987020    1007 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1744248798.987036    1007 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1744248798.987040    1007 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+W0000 00:00:1744248798.987042    1007 computation_placer.cc:177] computation placer already registered. Please check linkage and avoid linking the same target more than once.
+2025-04-10 01:33:18.990230: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+Traceback (most recent call last):
+  File "/home/runner/workspace/cube_trainer.py", line 438, in <module>
+    main()
+  File "/home/runner/workspace/cube_trainer.py", line 401, in main
+    trainer = CubeSolverTrainer(model_path=args.model)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/cube_trainer.py", line 43, in __init__
+    self.network = create_1lll_network()
+                   ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/cube_neural_network.py", line 143, in create_1lll_network
+    return CubeNeuralNetwork(input_size=54, action_size=15, learning_rate=0.001)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/cube_neural_network.py", line 32, in __init__
+    self.model = self._build_model()
+                 ^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/cube_neural_network.py", line 46, in _build_model
+    reshaped_input = tf.reshape(input_layer, [-1, 54, 1])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/tensorflow/python/ops/weak_tensor_ops.py", line 88, in wrapper
+    return op(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/tensorflow/python/util/traceback_utils.py", line 153, in error_handler
+    raise e.with_traceback(filtered_tb) from None
+  File "/home/runner/workspace/.pythonlibs/lib/python3.11/site-packages/keras/src/backend/common/keras_tensor.py", line 156, in __tf_tensor__
+    raise ValueError(
+ValueError: A KerasTensor cannot be used as input to a TensorFlow function. A KerasTensor is a symbolic placeholder for a shape and dtype, used when constructing Keras Functional models or Keras Functions. You can only use it as input to a Keras layer or a Keras operation (from the namespaces `keras.layers` and `keras.ops`). You are likely doing something like:
+
+```
+x = Input(...)
+...
+tf_fn(x)  # Invalid.
+```
+
+What you should do instead is wrap `tf_fn` in a layer:
+
+```
+class MyLayer(Layer):
+    def call(self, x):
+        return tf_fn(x)
+
+x = MyLayer()(x)
+```
