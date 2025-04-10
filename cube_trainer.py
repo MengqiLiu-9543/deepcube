@@ -594,8 +594,7 @@ def run_interactive_mode():
                 # Evaluate
                 level = input("Enter difficulty level to evaluate (1-5, default=current): ")
                 level = int(level) if level.isdigit() and 1 <= int(level) <= 5 else None
-                num_tests = input("Enter number of test cases (default=10): ")
-                num_tests = int(num_tests) if num_tests.isdigit() else 10
+                num_tests = 5  # Fixed number of test cases
                 use_mcts = input("Use MCTS for evaluation? (y/n, slower but better): ").lower().startswith('y')
                 trainer.evaluate(num_tests=num_tests, curriculum_level=level, use_mcts=use_mcts)
 
@@ -666,7 +665,7 @@ def main():
         level = args.level if args.level is not None else trainer.curriculum_level
         print(f"Evaluating at curriculum level {level}")
         trainer.evaluate(
-            num_tests=20,
+            num_tests=5,
             curriculum_level=level,
             use_mcts=args.mcts
         )
