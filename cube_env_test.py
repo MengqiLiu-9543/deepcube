@@ -1,21 +1,13 @@
 
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Simple Rubik's Cube Environment Demo
-"""
-
 from cube_env import CubeEnv, create_scrambled_cube
 
 def simple_demo():
-
     env = CubeEnv()
-
     state = env.reset(use_oll_pll=True)
-
     env.render()
     env.save_image("scrambled_cube.png")
-
     # Define a simple sequence of moves
     moves = ["R", "U", "R'", "U'", "R", "U", "R'", "U'"]
     print(f"\nExecuting sequence: {' '.join(moves)}")
@@ -24,7 +16,6 @@ def simple_demo():
     for action in moves:
         next_state, reward, done, info = env.step(action)
         print(f"Action: {action}, Reward: {reward}, Done: {done}, Steps: {info['steps']}")
-
         if done:
             print("Cube solved!")
             break

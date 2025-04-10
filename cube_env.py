@@ -13,17 +13,18 @@ import copy
 import random
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-
 # Import the original cube code
 from cube_rotation import RubikCube, draw_cube, rotate_face, rotate_face_ccw, rotate_face_180
 # Import the OLL+PLL generator
 from random_cube_generator import generate_oll_pll
+
 
 class CubeEnv:
     """
     Cube Environment based on RubikCube class
     Suitable for Reinforcement Learning training
     """
+
     def __init__(self, initial_state=None):
         # Initialize the cube
         if initial_state is None:
@@ -38,9 +39,21 @@ class CubeEnv:
 
         # Define action space (excluding B moves)
         self.action_space = [
-            "U", "D", "F", "L", "R",      # Clockwise rotations
-            "U'", "D'", "F'", "L'", "R'",  # Counter-clockwise rotations
-            "U2", "D2", "F2", "L2", "R2"   # 180-degree rotations
+            "U",
+            "D",
+            "F",
+            "L",
+            "R",  # Clockwise rotations
+            "U'",
+            "D'",
+            "F'",
+            "L'",
+            "R'",  # Counter-clockwise rotations
+            "U2",
+            "D2",
+            "F2",
+            "L2",
+            "R2"  # 180-degree rotations
         ]
 
         # Color mapping for state representation
@@ -50,13 +63,13 @@ class CubeEnv:
             'R': 2,  # Red (Front face)
             'O': 3,  # Orange (Back face)
             'G': 4,  # Green (Left face)
-            'B': 5   # Blue (Right face)
+            'B': 5  # Blue (Right face)
         }
 
         # Track current step count
         self.current_step = 0
         # Maximum steps limit
-        self.max_steps = 50
+        self.max_steps = 30
 
     def reset(self, scramble=None, use_oll_pll=False):
         """
@@ -103,7 +116,9 @@ class CubeEnv:
         # Handle integer index actions
         if isinstance(action, int):
             if action < 0 or action >= len(self.action_space):
-                raise ValueError(f"Action index {action} out of range 0-{len(self.action_space)-1}")
+                raise ValueError(
+                    f"Action index {action} out of range 0-{len(self.action_space)-1}"
+                )
             action_str = self.action_space[action]
         else:
             action_str = action
@@ -121,12 +136,12 @@ class CubeEnv:
         done = self.is_solved() or self.current_step >= self.max_steps
 
         # Reward design:
-        # - Completion: +10
-        # - Each step: -0.1 (encourages fewer steps)
+        # - Completion: +1
+        # - Each step: -1 (encourages fewer steps)
         if self.is_solved():
-            reward = 10.0
+            reward = 1.0
         else:
-            reward = -0.1
+            reward = -1
 
         # Return next state, reward, completion status, and info
         return self.get_state(), reward, done, {
@@ -273,8 +288,11 @@ class CubeEnv:
 
         return result_cube
 
+
 # Helper functions
-def create_scrambled_cube(scramble_formula=None, n_random_moves=0, use_oll_pll=False):
+def create_scrambled_cube(scramble_formula=None,
+                          n_random_moves=0,
+                          use_oll_pll=False):
     """
     Create a scrambled cube
 
@@ -301,6 +319,8 @@ def create_scrambled_cube(scramble_formula=None, n_random_moves=0, use_oll_pll=F
             env.step(action)
 
     return env
+
+
 '''
 The demo code is commented out as it is not needed for the current implementation.
 # Demo code
