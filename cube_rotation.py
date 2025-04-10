@@ -1,10 +1,9 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 This code implements:
 1. RubikCube class to simulate cube state, generating scrambled states based on input move sequences (e.g., "U R U' L2")
-2. Using matplotlib to draw cube net diagrams and save as images (rubik_cube.png)
+2. Using matplotlib to draw cube net diagrams _and save as images (rubik_cube.png)
 Note: Left and right face colors have been adjusted, left face is green, right face is blue.
 """
 
