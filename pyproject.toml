@@ -9,4 +9,5 @@ dependencies = [
     "numpy>=2.2.4",
     "pycuber>=0.2.2",
     "tensorflow>=2.14.0",
+    "tqdm>=4.67.1",
 ]
