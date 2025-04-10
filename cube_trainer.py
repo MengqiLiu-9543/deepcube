@@ -381,6 +381,11 @@ class CubeTrainer:
                 _, policy = self.network.predict(state)
                 action = np.argmax(policy)
 
+            # Ensure action is valid
+            if action >= len(solve_env.action_space):
+                print(f"Warning: Invalid action {action}, using random action instead")
+                action = np.random.randint(0, len(solve_env.action_space))
+
             # Take action
             _, _, done, _ = solve_env.step(action)
             solution.append(solve_env.action_space[action])
