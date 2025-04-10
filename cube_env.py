@@ -249,18 +249,19 @@ class CubeEnv:
             scramble_sequence: A string of space-separated moves, e.g. "R U R' U'"
 
         Returns:
-            The cube state after applying the scramble
+            bool: Whether the scramble was successfully applied
         """
         # Reset to solved state first
         self.reset()
 
         # Execute the scramble sequence
-        if self.execute_formula(scramble_sequence):
+        success = self.execute_formula(scramble_sequence)
+        if success:
             print(f"Applied custom scramble: {scramble_sequence}")
         else:
             print("Failed to apply custom scramble - invalid moves detected")
 
-        return self.get_state()
+        return success
 
     def is_solved(self):
         """
