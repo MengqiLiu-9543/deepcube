@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Neural Network for Rubik's Cube Solver
+Neural Network for Rubik's Cube 1LLL Solver
 
-This script defines the neural network architecture for solving the Rubik's cube.
-Based on the DeepCube approach but adapted for 1LLL (Last Layer in one Look).
-
-The architecture uses a value and policy network similar to AlphaZero:
-- Value head: Predicts how close the current state is to being solved
-- Policy head: Predicts the probability distribution over possible actions
+This module implements multiple neural network architectures inspired by DeepCube:
+- ResNet architecture with residual connections
+- LSTM architecture for sequence modeling
+- Combined value and policy network for reinforcement learning
+- One-hot encoded state representation
 """
 
 import tensorflow as tf
@@ -16,65 +15,171 @@ from tensorflow import keras
 import numpy as np
 import os
 
+
+class ResidualBlock(keras.layers.Layer):
+    """
+    Residual block as used in DeepCube architecture
+    """
+
+    def __init__(self, filters):
+        super(ResidualBlock, self).__init__()
+        self.dense1 = keras.layers.Dense(filters, activation=None)
+        self.batch_norm1 = keras.layers.BatchNormalization()
+        self.dense2 = keras.layers.Dense(filters, activation=None)
+        self.batch_norm2 = keras.layers.BatchNormalization()
+        self.activation = keras.layers.Activation('relu')
+
+    def call(self, inputs, training=False, *args, **kwargs):
+        x = self.dense1(inputs)
+        x = self.batch_norm1(x, training=training)
+        x = self.activation(x)
+        x = self.dense2(x)
+        x = self.batch_norm2(x, training=training)
+        x = x + inputs  # Skip connection
+        return self.activation(x)
+
+
 class CubeNeuralNetwork:
-    def __init__(self, input_size=54, action_size=15, learning_rate=0.001):
+    """
+    Neural network for the Rubik's Cube 1LLL solver
+    Supports multiple architectures including ResNet and LSTM
+    """
+
+    def __init__(self,
+                 input_shape=(54, 6),
+                 action_size=15,
+                 learning_rate=0.001,
+                 architecture='resnet'):
         """
-        Initialize the neural network for Rubik's cube solving
+        Initialize the neural network
 
         Args:
-            input_size: Size of the state representation (54 for a flattened cube)
-            action_size: Number of possible actions (15 for U, D, F, L, R and their variants)
-            learning_rate: Learning rate for the optimizer
+            input_shape: Shape of input state (54 stickers, 6 colors one-hot encoded)
+            action_size: Number of possible actions (15 for 5 faces x 3 rotations)
+            learning_rate: Learning rate for optimizer
+            architecture: 'resnet' or 'lstm'
         """
-        self.input_size = input_size
+        self.input_shape = input_shape
         self.action_size = action_size
         self.learning_rate = learning_rate
+        self.architecture = architecture
         self.model = self._build_model()
 
     def _build_model(self):
         """
-        Build the neural network model with value and policy heads
+        Build the neural network model
 
         Returns:
-            A compiled Keras model
+            Compiled Keras model
+        """
+        if self.architecture == 'resnet':
+            return self._build_resnet_model()
+        elif self.architecture == 'lstm':
+            return self._build_lstm_model()
+        else:
+            raise ValueError(f"Unknown architecture: {self.architecture}")
+
+    def _build_resnet_model(self):
+        """
+        Build a ResNet model with residual connections
+
+        Returns:
+            Compiled Keras model
         """
         # Input layer
-        input_layer = keras.Input(shape=(self.input_size,))
+        inputs = keras.layers.Input(shape=self.input_shape)
 
-        # Convert to one-hot encoding if not already
-        # For cube state where each position has 6 possible colors
-        reshaped_input = keras.layers.Reshape((54, 1))(input_layer)
-        one_hot_input = keras.layers.Lambda(lambda x: tf.one_hot(tf.cast(x, tf.int32), depth=6))(reshaped_input)
-        flattened_input = keras.layers.Flatten()(one_hot_input)
+        # Flatten the input
+        x = keras.layers.Flatten()(inputs)
 
-        # Shared network layers
-        x = keras.layers.Dense(1024, activation='elu')(flattened_input)
-        x = keras.layers.BatchNormalization()(x)
-        x = keras.layers.Dense(512, activation='elu')(x)
+        # Initial dense layer
+        x = keras.layers.Dense(1024, activation='relu')(x)
         x = keras.layers.BatchNormalization()(x)
 
-        # Value head - predicts how close to solved
-        value_head = keras.layers.Dense(256, activation='elu')(x)
+        # Residual blocks (8 blocks as in DeepCube, but with fewer filters for 1LLL)
+        num_residual_blocks = 8
+        for _ in range(num_residual_blocks):
+            x = ResidualBlock(1024)(x)
+
+        # Value head - estimates how "good" the current state is
+        value_head = keras.layers.Dense(512, activation='relu')(x)
+        value_head = keras.layers.BatchNormalization()(value_head)
+        value_head = keras.layers.Dense(256, activation='relu')(value_head)
+        value_output = keras.layers.Dense(1, name='value_output')(value_head)
+
+        # Policy head - outputs probability distribution over actions
+        policy_head = keras.layers.Dense(512, activation='relu')(x)
+        policy_head = keras.layers.BatchNormalization()(policy_head)
+        policy_head = keras.layers.Dense(256, activation='relu')(policy_head)
+        policy_output = keras.layers.Dense(self.action_size,
+                                           activation='softmax',
+                                           name='policy_output')(policy_head)
+
+        # Create model with two outputs
+        model = keras.Model(inputs=inputs,
+                            outputs=[value_output, policy_output])
+
+        # Compile model
+        optimizer = keras.optimizers.Adam(learning_rate=self.learning_rate)
+        model.compile(optimizer=optimizer,
+                      loss={
+                          'value_output': 'mean_squared_error',
+                          'policy_output': 'categorical_crossentropy'
+                      })
+
+        # Print model summary
+        model.summary()
+
+        return model
+
+    def _build_lstm_model(self):
+        """
+        Build an LSTM model for sequence modeling
+
+        Returns:
+            Compiled Keras model
+        """
+        # Input layer
+        inputs = keras.layers.Input(shape=self.input_shape)
+
+        # Reshape for LSTM (treating each sticker as a sequence element)
+        reshaped = keras.layers.Reshape((54, 6))(inputs)
+
+        # LSTM layers
+        x = keras.layers.LSTM(512, return_sequences=True)(reshaped)
+        x = keras.layers.LSTM(512)(x)
+
+        # Dense layers
+        x = keras.layers.Dense(1024, activation='relu')(x)
+        x = keras.layers.BatchNormalization()(x)
+        x = keras.layers.Dropout(0.3)(x)
+
+        x = keras.layers.Dense(512, activation='relu')(x)
+        x = keras.layers.BatchNormalization()(x)
+
+        # Value head
+        value_head = keras.layers.Dense(256, activation='relu')(x)
         value_head = keras.layers.BatchNormalization()(value_head)
         value_output = keras.layers.Dense(1, name='value_output')(value_head)
 
-        # Policy head - predicts action probabilities
-        policy_head = keras.layers.Dense(256, activation='elu')(x)
+        # Policy head
+        policy_head = keras.layers.Dense(256, activation='relu')(x)
         policy_head = keras.layers.BatchNormalization()(policy_head)
-        policy_output = keras.layers.Dense(self.action_size, activation='softmax', name='policy_output')(policy_head)
+        policy_output = keras.layers.Dense(self.action_size,
+                                           activation='softmax',
+                                           name='policy_output')(policy_head)
 
         # Create model with two outputs
-        model = keras.Model(inputs=input_layer, outputs=[value_output, policy_output])
+        model = keras.Model(inputs=inputs,
+                            outputs=[value_output, policy_output])
 
-        # Compile model with appropriate losses
+        # Compile model
         optimizer = keras.optimizers.Adam(learning_rate=self.learning_rate)
-        model.compile(
-            optimizer=optimizer,
-            loss={
-                'value_output': 'mean_squared_error',
-                'policy_output': 'categorical_crossentropy'
-            }
-        )
+        model.compile(optimizer=optimizer,
+                      loss={
+                          'value_output': 'mean_squared_error',
+                          'policy_output': 'categorical_crossentropy'
+                      })
 
         # Print model summary
         model.summary()
@@ -83,72 +188,62 @@ class CubeNeuralNetwork:
 
     def predict(self, state):
         """
-        Predict value and policy for a given state
+        Make a prediction for a single state
 
         Args:
-            state: Current cube state representation
+            state: One-hot encoded state representation
 
         Returns:
-            value: Estimated value of the state
-            policy: Action probability distribution
+            value, policy: Predicted state value and action probabilities
         """
-        value, policy = self.model.predict(np.array([state]), verbose=0)
+        # Ensure state is properly shaped
+        if len(state.shape) == 2:  # Single state
+            state = np.expand_dims(state, axis=0)
+
+        # Make prediction
+        value, policy = self.model.predict(state, verbose=0)
+
+        # Return value scalar and policy vector
         return value[0][0], policy[0]
 
-    def train(self, states, values, policies, epochs=10, batch_size=64):
+    def train(self, states, values, policies, batch_size=64, epochs=1):
         """
-        Train the model on collected data
+        Train the model on a batch of data
 
         Args:
-            states: Array of cube states
-            values: Target values for each state
-            policies: Target policies for each state
-            epochs: Number of training epochs
+            states: Batch of states (one-hot encoded)
+            values: Target values for states
+            policies: Target policies (action probabilities)
             batch_size: Batch size for training
+            epochs: Number of training epochs
 
         Returns:
-            Training history
+            History object from training
         """
-        history = self.model.fit(
-            np.array(states),
-            {'value_output': np.array(values), 'policy_output': np.array(policies)},
-            epochs=epochs,
-            batch_size=batch_size,
-            verbose=1
-        )
+        history = self.model.fit(states, {
+            'value_output': values,
+            'policy_output': policies
+        },
+                                 batch_size=batch_size,
+                                 epochs=epochs,
+                                 verbose=1)
         return history
 
     def save_model(self, filepath):
-        """Save the model to a file"""
-        self.model.save(filepath)
+        """Save model weights to file"""
+        self.model.save_weights(filepath)
         print(f"Model saved to {filepath}")
 
     def load_model(self, filepath):
-        """Load the model from a file"""
+        """Load model weights from file"""
         if os.path.exists(filepath):
-            self.model = keras.models.load_model(filepath)
-            print(f"Model loaded from {filepath}")
-            return True
-        return False
-
-
-def create_1lll_network():
-    """
-    Create a neural network specifically designed for 1LLL cube solving
-
-    Returns:
-        A CubeNeuralNetwork instance
-    """
-    # Default parameters suitable for 1LLL
-    return CubeNeuralNetwork(input_size=54, action_size=15, learning_rate=0.001)
-
-
-if __name__ == "__main__":
-    # Simple test to ensure the model compiles correctly
-    network = create_1lll_network()
-
-    # Generate a random cube state for testing
-    test_state = np.random.randint(0, 6, size=54)
-    value, policy = network.predict(test_state)
-
-    print(f"Test prediction - Value: {value}, Top actions: {np.argsort(policy)[-3:][::-1]}")
+            try:
+                self.model.load_weights(filepath)
+                print(f"Model loaded from {filepath}")
+                return True
+            except:
+                print(f"Failed to load model from {filepath}")
+                return False
+        else:
+            print(f"Model file {filepath} not found")
+            return False

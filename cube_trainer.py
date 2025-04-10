@@ -1,438 +1,692 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Rubik's Cube Solver Trainer
+Training System for Rubik's Cube 1LLL Solver with Curriculum Learning
 
-This script implements the training process for the Rubik's cube solver using
-Autodidactic Iteration (ADI) similar to DeepCube's approach. It focuses on
-solving the 1LLL (Last Layer in one Look) case of the Rubik's cube.
-
-The script supports:
-1. Training with custom scrambles
-2. Training with random scrambles from OLL+PLL algorithms
-3. Testing the trained solver on new scrambles
+This module implements:
+1. Autodidactic Iteration (ADI) - DeepCube's self-play training algorithm
+2. Progressive curriculum learning from easy to hard scrambles 
+3. Experience replay for stable learning
+4. Integration with MCTS for solving
+5. Custom scramble mode for user-defined patterns
 """
 
 import numpy as np
+import tensorflow as tf
+from tensorflow import keras
 import time
 import random
-import argparse
+import matplotlib.pyplot as plt
 import os
 from collections import deque
-import tensorflow as tf
+import argparse
+from tqdm import tqdm
 
-# Import our custom modules
-from cube_neural_network import CubeNeuralNetwork, create_1lll_network
-# Import the cube environment
+# Import custom modules
 from cube_env import CubeEnv, create_scrambled_cube
+from cube_neural_network import CubeNeuralNetwork
+from mcts import MCTS
 
-# Set random seed for reproducibility
-np.random.seed(42)
+# Set random seeds for reproducibility
 random.seed(42)
+np.random.seed(42)
 tf.random.set_seed(42)
 
-class CubeSolverTrainer:
-    def __init__(self, model_path='cube_solver_model.h5'):
+# Constants
+DEFAULT_MODEL_PATH = '1lll_solver_model.h5'
+EXPERIENCE_BUFFER_SIZE = 100000
+BATCH_SIZE = 128
+GAMMA = 0.997  # Discount factor for future rewards
+MAX_STEPS = 30  # Maximum steps for solving
+
+# Curriculum learning parameters
+SUCCESS_THRESHOLD = 0.7  # Success rate required to advance level
+MIN_EVALUATIONS = 20    # Minimum evaluations before advancing
+
+class CubeTrainer:
+    """
+    Training system for 1LLL Rubik's Cube solver
+    Uses DeepCube's Autodidactic Iteration with curriculum learning
+    """
+
+    def __init__(self, model_path=DEFAULT_MODEL_PATH, architecture='resnet'):
         """
-        Initialize the Rubik's cube solver trainer
+        Initialize the trainer
 
         Args:
-            model_path: Path to save/load the model
+            model_path: Path to save/load model
+            architecture: 'resnet' or 'lstm'
         """
         self.model_path = model_path
-        self.network = create_1lll_network()
+        self.architecture = architecture
+
+        # Initialize neural network
+        print(f"Initializing neural network with {architecture} architecture")
+        self.network = CubeNeuralNetwork(
+            input_shape=(54, 6),
+            action_size=15,
+            learning_rate=0.001,
+            architecture=architecture
+        )
 
         # Try to load existing model
         if os.path.exists(model_path):
             self.network.load_model(model_path)
 
-        # Initialize experience replay buffer
-        self.replay_buffer = deque(maxlen=10000)
+        # Initialize MCTS solver
+        self.mcts = MCTS(neural_network=self.network)
 
-        # Maximum number of steps to solve
-        self.max_steps = 30
+        # Experience replay buffer
+        self.replay_buffer = deque(maxlen=EXPERIENCE_BUFFER_SIZE)
 
-    def generate_training_data(self, num_samples=1000, use_oll_pll=True, custom_scramble=None):
+        # Curriculum learning state
+        self.curriculum_level = 1  # Start at easiest level
+        self.success_history = deque(maxlen=MIN_EVALUATIONS)
+
+        # Training metrics
+        self.metrics = {
+            'loss': [],
+            'value_loss': [],
+            'policy_loss': [],
+            'success_rate': [],
+            'avg_steps': [],
+            'curriculum_level': []
+        }
+
+        print(f"Trainer initialized with curriculum level {self.curriculum_level}")
+
+    def autodidactic_iteration(self, num_samples, curriculum_level=None):
         """
-        Generate training data using Autodidactic Iteration (ADI)
+        Implementation of Autodidactic Iteration (ADI) algorithm from DeepCube
 
         Args:
-            num_samples: Number of scrambles to generate
-            use_oll_pll: Whether to use OLL+PLL algorithms for scrambling
-            custom_scramble: Custom scramble formula (overrides random generation)
+            num_samples: Number of training samples to generate
+            curriculum_level: Difficulty level (1-5)
 
         Returns:
             states, values, policies: Training data
         """
-        states, values, policies = [], [], []
+        if curriculum_level is None:
+            curriculum_level = self.curriculum_level
 
-        for i in range(num_samples):
-            if i % 100 == 0:
-                print(f"Generating data sample {i}/{num_samples}")
+        print(f"Running Autodidactic Iteration for {num_samples} samples at level {curriculum_level}")
 
-            # Initialize environment
-            env = CubeEnv()
+        states = []
+        values = []
+        policies = []
 
-            # Apply scramble
-            if custom_scramble:
-                env.custom_scramble(custom_scramble)
-                scramble_type = "custom"
-            elif use_oll_pll:
-                env.reset(use_oll_pll=True)
-                scramble_type = "OLL+PLL"
-            else:
-                # Random scramble with n random moves
-                env.reset()
-                n_moves = random.randint(5, 15)
-                for _ in range(n_moves):
-                    action = random.choice(env.action_space)
-                    env.step(action)
-                scramble_type = f"random-{n_moves}"
+        for i in tqdm(range(num_samples)):
+            # Create scrambled cube at appropriate difficulty
+            env = create_scrambled_cube(curriculum_level=curriculum_level)
 
-            # Get the initial state
-            state = env.get_state()
+            # Get current state (one-hot encoded)
+            state = env.get_one_hot_state()
 
-            # For each possible action, evaluate the resulting state
+            # For each possible action, evaluate resulting state
             action_values = np.zeros(len(env.action_space))
 
-            for action_idx, action in enumerate(env.action_space):
-                # Create a copy of the environment
-                test_env = CubeEnv(initial_state=env.cube)
-                next_state, reward, done, _ = test_env.step(action)
+            for action in range(len(env.action_space)):
+                # Copy environment
+                test_env = env.copy()
 
-                if done and reward > 0:  # Solved in one step
-                    action_values[action_idx] = 1.0
+                # Take action
+                _, reward, done, _ = test_env.step(action)
+
+                # If action solves the cube, it has maximum value
+                if done and test_env.is_solved():
+                    action_values[action] = 1.0
                 else:
-                    # Use the network to estimate the value of the resulting state
+                    # Otherwise, use neural network to evaluate resulting state
+                    next_state = test_env.get_one_hot_state()
                     value, _ = self.network.predict(next_state)
-                    action_values[action_idx] = value
 
-            # The best action has the highest value
-            best_action_idx = np.argmax(action_values)
+                    # Value is immediate reward plus discounted future value
+                    action_values[action] = reward + GAMMA * value
 
-            # Create a policy distribution focused on the best action
+            # Best action has highest value
+            best_action = np.argmax(action_values)
+            best_value = action_values[best_action]
+
+            # Create policy (one-hot encoding for best action)
             policy = np.zeros(len(env.action_space))
-            policy[best_action_idx] = 1.0  # One-hot encoding for the best action
-
-            # The value of the current state is the value of the best action
-            value = action_values[best_action_idx]
+            policy[best_action] = 1.0
 
             # Add to training data
             states.append(state)
-            values.append([value])  # Value is a scalar
+            values.append([best_value])
             policies.append(policy)
 
-            # Add to replay buffer
-            self.replay_buffer.append((state, value, policy))
+            # Add experience to replay buffer
+            self.replay_buffer.append((state, best_value, policy))
 
-            # Occasionally print an example
-            if i % 500 == 0 and i > 0:
-                print(f"\nScramble type: {scramble_type}")
-                print(f"Best action: {env.action_space[best_action_idx]} (idx {best_action_idx})")
-                print(f"State value: {value}")
+            # Occasionally print example
+            if i > 0 and i % 500 == 0:
+                print(f"\nSample {i}:")
+                print(f"Best action: {env.action_space[best_action]}")
                 print(f"Action values: {action_values}")
+                print(f"Best value: {best_value:.4f}")
 
         return np.array(states), np.array(values), np.array(policies)
 
-    def train_network(self, epochs=10, batch_size=64, samples_per_epoch=1000, use_oll_pll=True, custom_scramble=None):
+    def train(self, iterations=50, samples_per_iteration=500, eval_interval=5):
         """
-        Train the network using ADI
+        Train the model with curriculum learning
 
         Args:
-            epochs: Number of training epochs
-            batch_size: Batch size for training
-            samples_per_epoch: Number of new samples to generate per epoch
-            use_oll_pll: Whether to use OLL+PLL algorithms for scrambling
-            custom_scramble: Custom scramble formula
+            iterations: Number of training iterations
+            samples_per_iteration: ADI samples per iteration
+            eval_interval: How often to evaluate and adjust curriculum
 
         Returns:
-            Training history
+            Training metrics
         """
-        print(f"Starting training for {epochs} epochs")
-        print(f"Generating {samples_per_epoch} samples per epoch")
+        print(f"Starting training for {iterations} iterations")
+        print(f"Neural network architecture: {self.architecture}")
+        print(f"Initial curriculum level: {self.curriculum_level}")
 
-        history = []
-
-        for epoch in range(epochs):
-            print(f"\nEpoch {epoch+1}/{epochs}")
+        # Main training loop
+        for iteration in range(iterations):
             start_time = time.time()
+            print(f"\n--- Iteration {iteration+1}/{iterations} ---")
+            print(f"Current curriculum level: {self.curriculum_level}")
 
-            # Generate new training data
-            print("Generating training data...")
-            states, values, policies = self.generate_training_data(
-                num_samples=samples_per_epoch,
-                use_oll_pll=use_oll_pll,
-                custom_scramble=custom_scramble
+            # Generate training data using ADI
+            states, values, policies = self.autodidactic_iteration(
+                num_samples=samples_per_iteration,
+                curriculum_level=self.curriculum_level
             )
 
-            # Mix with replay buffer for more stable training
-            if len(self.replay_buffer) > 0:
-                print(f"Adding {min(samples_per_epoch, len(self.replay_buffer))} samples from replay buffer")
-                replay_samples = random.sample(self.replay_buffer, min(samples_per_epoch, len(self.replay_buffer)))
+            # Mix with replay buffer if available
+            if len(self.replay_buffer) > BATCH_SIZE:
+                num_replay = min(samples_per_iteration // 2, len(self.replay_buffer))
+                print(f"Mixing with {num_replay} samples from experience replay")
+
+                # Sample from replay buffer
+                replay_samples = random.sample(self.replay_buffer, num_replay)
                 replay_states, replay_values, replay_policies = zip(*replay_samples)
 
-                states = np.vstack([states, np.array(replay_states)])
-                values = np.vstack([values, np.array(replay_values).reshape(-1, 1)])
-                policies = np.vstack([policies, np.array(replay_policies)])
+                # Convert to arrays
+                replay_states = np.array(replay_states)
+                replay_values = np.array(replay_values).reshape(-1, 1)
+                replay_policies = np.array(replay_policies)
 
-            # Train the network
-            print("Training network...")
-            epoch_history = self.network.train(states, values, policies, epochs=1, batch_size=batch_size)
-            history.append(epoch_history)
+                # Combine with new samples
+                states = np.concatenate([states, replay_states])
+                values = np.concatenate([values, replay_values])
+                policies = np.concatenate([policies, replay_policies])
 
-            # Save the model
+            # Train neural network
+            print("Training neural network...")
+            history = self.network.train(
+                states=states,
+                values=values,
+                policies=policies,
+                batch_size=BATCH_SIZE,
+                epochs=1
+            )
+
+            # Record metrics
+            self.metrics['loss'].append(history.history['loss'][0])
+            if 'value_output_loss' in history.history:
+                self.metrics['value_loss'].append(history.history['value_output_loss'][0])
+                self.metrics['policy_loss'].append(history.history['policy_output_loss'][0])
+
+            # Save model
             self.network.save_model(self.model_path)
 
-            # Print epoch summary
+            # Evaluate and adjust curriculum
+            if (iteration + 1) % eval_interval == 0 or iteration == 0:
+                success_rate, avg_steps = self.evaluate(num_tests=5)
+
+                # Record metrics
+                self.metrics['success_rate'].append(success_rate)
+                self.metrics['avg_steps'].append(avg_steps)
+                self.metrics['curriculum_level'].append(self.curriculum_level)
+
+                # Update curriculum level
+                self._update_curriculum(success_rate)
+
+            # Print iteration summary
             end_time = time.time()
-            print(f"Epoch {epoch+1} completed in {end_time - start_time:.2f} seconds")
+            print(f"Iteration {iteration+1} completed in {end_time - start_time:.2f} seconds")
 
-            # Evaluate on a few test cases
-            self.evaluate_model(num_tests=5, use_oll_pll=use_oll_pll)
+        # Final evaluation
+        print("\n--- Final Evaluation ---")
+        for level in range(1, 6):
+            self.evaluate(num_tests=10, curriculum_level=level)
 
-        return history
+        # Plot training progress
+        self._plot_training_progress()
 
-    def evaluate_model(self, num_tests=10, use_oll_pll=True, custom_scramble=None):
+        return self.metrics
+
+    def _update_curriculum(self, success_rate):
         """
-        Evaluate the model on test scrambles
+        Update curriculum level based on performance
+
+        Args:
+            success_rate: Success rate (0-100%)
+        """
+        # Add to success history
+        self.success_history.append(success_rate)
+
+        # Only consider advancement if we have enough evaluations
+        if len(self.success_history) >= MIN_EVALUATIONS:
+            # Calculate average success rate
+            avg_success = sum(self.success_history) / len(self.success_history)
+
+            if avg_success >= SUCCESS_THRESHOLD and self.curriculum_level < 5:
+                # Advance to next level
+                self.curriculum_level += 1
+                print(f"\n*** ADVANCING TO CURRICULUM LEVEL {self.curriculum_level} ***")
+
+                # Reset success history
+                self.success_history.clear()
+            elif avg_success < 0.3 and self.curriculum_level > 1:
+                # If performing poorly, go back to easier level
+                self.curriculum_level -= 1
+                print(f"\n*** RETURNING TO CURRICULUM LEVEL {self.curriculum_level} ***")
+
+                # Reset success history
+                self.success_history.clear()
+
+        print(f"Current curriculum level: {self.curriculum_level}")
+        if self.success_history:
+            avg = sum(self.success_history) / len(self.success_history)
+            print(f"Average success rate: {avg:.1f}% ({len(self.success_history)}/{MIN_EVALUATIONS} evaluations)")
+
+    def evaluate(self, num_tests=5, curriculum_level=None, use_mcts=True):
+        """
+        Evaluate solver on test cases
 
         Args:
             num_tests: Number of test cases
-            use_oll_pll: Whether to use OLL+PLL algorithms for scrambling
-            custom_scramble: Custom scramble formula
+            curriculum_level: Difficulty level (defaults to current level)
+            use_mcts: Whether to use MCTS for solving
 
         Returns:
-            success_rate: Percentage of successful solves
+            success_rate, avg_steps: Evaluation metrics
         """
-        print(f"\nEvaluating model on {num_tests} test cases")
+        if curriculum_level is None:
+            curriculum_level = self.curriculum_level
+
+        print(f"Evaluating on {num_tests} tests at level {curriculum_level}")
+        print(f"Solver: {'MCTS' if use_mcts else 'Greedy Policy'}")
 
         successes = 0
         total_steps = 0
 
         for i in range(num_tests):
-            env = CubeEnv()
+            # Create scrambled cube
+            env = create_scrambled_cube(curriculum_level=curriculum_level)
 
-            # Apply scramble
-            if custom_scramble:
-                env.custom_scramble(custom_scramble)
-                print(f"Test {i+1}: Using custom scramble: {custom_scramble}")
-            elif use_oll_pll:
-                scramble = env.reset(use_oll_pll=True)
-                print(f"Test {i+1}: Using OLL+PLL scramble")
-            else:
-                env.reset()
-                n_moves = random.randint(5, 15)
-                moves = []
-                for _ in range(n_moves):
-                    action = random.choice(env.action_space)
-                    env.step(action)
-                    moves.append(action)
-                print(f"Test {i+1}: Using random {n_moves}-move scramble: {' '.join(moves)}")
+            # Get the scramble formula
+            scramble = env.generate_curriculum_scramble()
+            print(f"Test {i+1} scramble: {scramble}")
 
             # Try to solve
-            solution, is_solved, steps = self.solve_cube(env)
+            solution, is_solved, steps = self.solve(env, use_mcts=use_mcts)
 
             if is_solved:
                 successes += 1
                 total_steps += steps
-                print(f"  ✓ Solved in {steps} steps. Solution: {solution}")
+                print(f"  ✓ Test {i+1}: Solved in {steps} steps")
+                print(f"  Solution: {' '.join(solution)}")
             else:
-                print(f"  ✗ Failed to solve. Attempted {steps} steps.")
+                print(f"  ✗ Test {i+1}: Failed to solve")
 
-        success_rate = successes / num_tests * 100
+        # Calculate metrics
+        success_rate = (successes / num_tests) * 100
         avg_steps = total_steps / successes if successes > 0 else 0
 
-        print(f"\nEvaluation results:")
+        print(f"\nEvaluation results at level {curriculum_level}:")
         print(f"Success rate: {success_rate:.1f}% ({successes}/{num_tests})")
         if successes > 0:
             print(f"Average steps for successful solves: {avg_steps:.1f}")
 
-        return success_rate
+        return success_rate, avg_steps
 
-    def solve_cube(self, env, max_steps=None):
+    def solve(self, env, max_steps=MAX_STEPS, use_mcts=True):
         """
-        Attempt to solve a cube using the trained network
+        Attempt to solve a cube
 
         Args:
-            env: Cube environment
-            max_steps: Maximum number of steps (defaults to self.max_steps)
+            env: CubeEnv environment
+            max_steps: Maximum steps to attempt
+            use_mcts: Whether to use MCTS
 
         Returns:
-            solution: List of moves applied
-            is_solved: Whether the cube was solved
+            solution: List of moves
+            is_solved: Whether solved successfully
             steps: Number of steps taken
         """
-        if max_steps is None:
-            max_steps = self.max_steps
-
         solution = []
-        is_solved = False
+        steps = 0
 
-        # Original state
-        original_env = CubeEnv(initial_state=env.cube)
+        # Make a copy of the environment
+        solve_env = env.copy()
 
-        for step in range(max_steps):
-            # Current state
-            state = env.get_state()
-
+        while steps < max_steps:
             # Check if already solved
-            if env.is_solved():
-                is_solved = True
+            if solve_env.is_solved():
+                return solution, True, steps
+
+            if use_mcts:
+                # Use MCTS to find best action
+                # Limit search time to 5 seconds per move
+                action = self.mcts.search(solve_env, time_limit=5)
+            else:
+                # Use greedy policy (no search)
+                state = solve_env.get_one_hot_state()
+                _, policy = self.network.predict(state)
+                action = np.argmax(policy)
+
+            # Take action
+            _, _, done, _ = solve_env.step(action)
+            solution.append(solve_env.action_space[action])
+            steps += 1
+
+            # Check if solved
+            if done and solve_env.is_solved():
+                return solution, True, steps
+
+        # Failed to solve within max steps
+        return solution, solve_env.is_solved(), steps
+
+    def solve_custom(self, scramble, use_mcts=True):
+        """
+        Solve a cube with a custom scramble formula
+
+        Args:
+            scramble: Custom scramble formula (e.g., "R U R' U'")
+            use_mcts: Whether to use MCTS
+
+        Returns:
+            solution, is_solved, steps
+        """
+        # Create a solved cube
+        env = CubeEnv()
+
+        # Apply custom scramble
+        if env.custom_scramble(scramble):
+            print("Applied scramble successfully")
+        else:
+            print("Failed to apply scramble - check formula")
+            return None, False, 0
+
+        # Show scrambled cube
+        print("\nScrambled cube:")
+        env.render()
+        print(f"Applied scramble: {scramble}")
+
+        # Try to solve
+        print("\nAttempting to solve...")
+        start_time = time.time()
+        solution, is_solved, steps = self.solve(env, use_mcts=use_mcts)
+        end_time = time.time()
+
+        # Show final state
+        print("\nFinal state:")
+        env.render()
+
+        if is_solved:
+            print(f"✓ Solved in {steps} steps! (took {end_time - start_time:.2f} seconds)")
+            print(f"Solution: {' '.join(solution)}")
+        else:
+            print(f"✗ Failed to solve after {steps} steps")
+            print(f"Partial solution: {' '.join(solution)}")
+
+        return solution, is_solved, steps
+
+    def demo_solve(self, curriculum_level=None, use_mcts=True):
+        """
+        Demonstrate solving a cube
+
+        Args:
+            curriculum_level: Difficulty level
+            use_mcts: Whether to use MCTS
+        """
+        if curriculum_level is None:
+            curriculum_level = self.curriculum_level
+
+        print(f"Demonstrating solve at level {curriculum_level}")
+        print(f"Using {'MCTS' if use_mcts else 'Greedy Policy'}")
+
+        # Create scrambled cube
+        env = create_scrambled_cube(curriculum_level=curriculum_level)
+
+        # Get the scramble formula
+        scramble = env.generate_curriculum_scramble()
+
+        print("Initial state:")
+        env.render()
+        print(f"Scramble: {scramble}")
+
+        # Try to solve
+        print("\nSolving step by step...")
+        start_time = time.time()
+
+        solve_env = env.copy()
+        solution = []
+        steps = 0
+
+        while steps < MAX_STEPS:
+            # Check if already solved
+            if solve_env.is_solved():
                 break
 
-            # Get action probabilities from the network
-            _, policy = self.network.predict(state)
+            if use_mcts:
+                # Use MCTS to find best action
+                action = self.mcts.search(solve_env, time_limit=3)
+            else:
+                # Use greedy policy
+                state = solve_env.get_one_hot_state()
+                _, policy = self.network.predict(state)
+                action = np.argmax(policy)
 
-            # Choose the action with the highest probability
-            action_idx = np.argmax(policy)
-            action = env.action_space[action_idx]
+            # Take action
+            move = solve_env.action_space[action]
+            _, _, done, _ = solve_env.step(action)
+            solution.append(move)
+            steps += 1
 
-            # Apply the action
-            env.step(action)
-            solution.append(action)
+            # Show each step
+            print(f"Step {steps}: {move}")
+            if steps % 3 == 0 or done:  # Show cube state every 3 steps
+                solve_env.render()
 
-        return ' '.join(solution), env.is_solved(), len(solution)
+            if done and solve_env.is_solved():
+                break
 
-    def solve_custom_scramble(self, scramble):
-        """
-        Solve a cube with a custom scramble
-
-        Args:
-            scramble: Scramble formula (e.g., "R U R' U'")
-
-        Returns:
-            Original cube state, solution sequence, and whether it was solved
-        """
-        env = CubeEnv()
-        env.custom_scramble(scramble)
-
-        print(f"Attempting to solve custom scramble: {scramble}")
-        print("Initial state:")
-        env.render()
-
-        solution, is_solved, steps = self.solve_cube(env)
+        end_time = time.time()
 
         print("\nFinal state:")
-        env.render()
+        solve_env.render()
 
-        if is_solved:
-            print(f"Solved in {steps} steps!")
-            print(f"Solution: {solution}")
+        if solve_env.is_solved():
+            print(f"\n✓ Solved in {steps} steps! (took {end_time - start_time:.2f} seconds)")
+            print(f"Complete solution: {' '.join(solution)}")
         else:
-            print(f"Failed to solve after {steps} steps.")
-            print(f"Partial solution attempted: {solution}")
+            print(f"\n✗ Failed to solve after {steps} steps")
+            print(f"Partial solution: {' '.join(solution)}")
 
-        return env, solution, is_solved
+        return solution, solve_env.is_solved(), steps
 
-    def solve_random_scramble(self, use_oll_pll=True, n_random_moves=10):
-        """
-        Solve a cube with a random scramble
+    def _plot_training_progress(self):
+        """Plot training metrics"""
+        plt.figure(figsize=(15, 12))
 
-        Args:
-            use_oll_pll: Whether to use OLL+PLL algorithms for scrambling
-            n_random_moves: Number of random moves if not using OLL+PLL
+        # Loss plot
+        plt.subplot(3, 1, 1)
+        plt.plot(self.metrics['loss'], 'r-', label='Total Loss')
+        if self.metrics['value_loss']:
+            plt.plot(self.metrics['value_loss'], 'b-', label='Value Loss')
+            plt.plot(self.metrics['policy_loss'], 'g-', label='Policy Loss')
+        plt.title('Training Loss')
+        plt.xlabel('Iteration')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.grid(True)
 
-        Returns:
-            Original cube state, solution sequence, and whether it was solved
-        """
-        env = CubeEnv()
+        # Success rate plot
+        plt.subplot(3, 1, 2)
+        eval_indices = range(len(self.metrics['success_rate']))
+        plt.plot(eval_indices, self.metrics['success_rate'], 'b-')
+        plt.xlabel('Evaluation')
+        plt.ylabel('Success Rate (%)')
+        plt.title('Solver Success Rate')
+        plt.grid(True)
 
-        if use_oll_pll:
-            env.reset(use_oll_pll=True)
-            scramble_type = "OLL+PLL"
-        else:
-            env.reset()
-            for _ in range(n_random_moves):
-                action = random.choice(env.action_space)
-                env.step(action)
-            scramble_type = f"{n_random_moves} random moves"
+        # Curriculum level and solution steps
+        plt.subplot(3, 1, 3)
+        plt.plot(eval_indices, self.metrics['curriculum_level'], 'r-', label='Curriculum Level')
+        plt.plot(eval_indices, self.metrics['avg_steps'], 'g-', label='Avg. Solution Steps')
+        plt.xlabel('Evaluation')
+        plt.ylabel('Value')
+        plt.title('Curriculum Level and Solution Steps')
+        plt.legend()
+        plt.grid(True)
 
-        print(f"Attempting to solve {scramble_type} scramble")
-        print("Initial state:")
-        env.render()
+        plt.tight_layout()
+        plt.savefig('training_progress.png')
+        print("Training progress plot saved as 'training_progress.png'")
 
-        solution, is_solved, steps = self.solve_cube(env)
+def run_interactive_mode():
+    """Run an interactive session with the cube solver"""
+    # Create trainer with default model
+    trainer = CubeTrainer()
 
-        print("\nFinal state:")
-        env.render()
+    print("\n=== 1LLL Rubik's Cube Solver Interactive Mode ===\n")
+    print("Options:")
+    print("1. Solve with custom scramble")
+    print("2. Demonstrate with random scramble")
+    print("3. Train the model")
+    print("4. Evaluate model performance")
+    print("5. Quit")
 
-        if is_solved:
-            print(f"Solved in {steps} steps!")
-            print(f"Solution: {solution}")
-        else:
-            print(f"Failed to solve after {steps} steps.")
-            print(f"Partial solution attempted: {solution}")
+    while True:
+        try:
+            choice = input("\nEnter your choice (1-5): ")
 
-        return env, solution, is_solved
+            if choice == '1':
+                # Custom scramble
+                scramble = input("Enter your scramble formula (e.g., 'R U R\' U\''): ")
+                use_mcts = input("Use MCTS for better results? (y/n, slower but better): ").lower().startswith('y')
+                trainer.solve_custom(scramble, use_mcts=use_mcts)
 
+            elif choice == '2':
+                # Demo solve
+                level = input("Enter difficulty level (1-5, default=current): ")
+                level = int(level) if level.isdigit() and 1 <= int(level) <= 5 else None
+                use_mcts = input("Use MCTS for better results? (y/n, slower but better): ").lower().startswith('y')
+                trainer.demo_solve(curriculum_level=level, use_mcts=use_mcts)
+
+            elif choice == '3':
+                # Train
+                iterations = input("Enter number of training iterations (default=20): ")
+                iterations = int(iterations) if iterations.isdigit() else 20
+                samples = input("Enter samples per iteration (default=200): ")
+                samples = int(samples) if samples.isdigit() else 200
+                print(f"\nStarting training with {iterations} iterations, {samples} samples each...")
+                trainer.train(iterations=iterations, samples_per_iteration=samples)
+
+            elif choice == '4':
+                # Evaluate
+                level = input("Enter difficulty level to evaluate (1-5, default=current): ")
+                level = int(level) if level.isdigit() and 1 <= int(level) <= 5 else None
+                num_tests = input("Enter number of test cases (default=10): ")
+                num_tests = int(num_tests) if num_tests.isdigit() else 10
+                use_mcts = input("Use MCTS for evaluation? (y/n, slower but better): ").lower().startswith('y')
+                trainer.evaluate(num_tests=num_tests, curriculum_level=level, use_mcts=use_mcts)
+
+            elif choice == '5':
+                # Quit
+                print("\nExiting. Goodbye!")
+                break
+
+            else:
+                print("Invalid choice. Please enter a number from 1 to 5.")
+
+        except Exception as e:
+            print(f"Error: {e}")
+            print("Let's try again.")
 
 def main():
-    """Main function to parse arguments and run training/evaluation"""
-    parser = argparse.ArgumentParser(description='Train and evaluate Rubik\'s cube solver')
+    """Main function - parse arguments and run trainer"""
+    parser = argparse.ArgumentParser(description='Train 1LLL Rubik\'s Cube Solver')
 
-    parser.add_argument('--mode', type=str, default='train',
-                        choices=['train', 'eval', 'solve_custom', 'solve_random'],
-                        help='Operation mode: train, eval, solve_custom, or solve_random')
+    parser.add_argument('--mode', type=str, default='interactive',
+                      choices=['train', 'eval', 'demo', 'custom', 'interactive'],
+                      help='Operation mode')
 
-    parser.add_argument('--model', type=str, default='cube_solver_model.h5',
-                        help='Path to save/load the model')
+    parser.add_argument('--architecture', type=str, default='resnet',
+                      choices=['resnet', 'lstm'],
+                      help='Neural network architecture')
 
-    parser.add_argument('--epochs', type=int, default=10,
-                        help='Number of training epochs')
+    parser.add_argument('--iterations', type=int, default=50,
+                      help='Number of training iterations')
 
-    parser.add_argument('--batch_size', type=int, default=64,
-                        help='Batch size for training')
+    parser.add_argument('--samples', type=int, default=500,
+                      help='Samples per iteration')
 
-    parser.add_argument('--samples', type=int, default=1000,
-                        help='Number of samples per epoch')
+    parser.add_argument('--level', type=int, default=None,
+                      help='Curriculum level (1-5) for evaluation/demo')
 
-    parser.add_argument('--use_oll_pll', action='store_true',
-                        help='Use OLL+PLL algorithms for scrambling')
+    parser.add_argument('--model', type=str, default=DEFAULT_MODEL_PATH,
+                      help='Model file path')
 
-    parser.add_argument('--custom_scramble', type=str, default=None,
-                        help='Custom scramble formula (e.g., "R U R\' U\')')
+    parser.add_argument('--mcts', action='store_true',
+                      help='Use MCTS for evaluation/demo (slower but better)')
 
-    parser.add_argument('--num_tests', type=int, default=10,
-                        help='Number of test cases for evaluation')
+    parser.add_argument('--scramble', type=str, default=None,
+                      help='Custom scramble formula (e.g., "R U R\' U\'") for custom mode')
 
     args = parser.parse_args()
 
-    # Initialize trainer
-    trainer = CubeSolverTrainer(model_path=args.model)
+    # Run in interactive mode if selected
+    if args.mode == 'interactive':
+        run_interactive_mode()
+        return
 
-    # Execute requested operation
+    # Create trainer
+    trainer = CubeTrainer(
+        model_path=args.model,
+        architecture=args.architecture
+    )
+
+    # Run in specified mode
     if args.mode == 'train':
-        print("Starting training...")
-        trainer.train_network(
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            samples_per_epoch=args.samples,
-            use_oll_pll=args.use_oll_pll,
-            custom_scramble=args.custom_scramble
+        print(f"Training with {args.architecture} architecture for {args.iterations} iterations")
+        trainer.train(
+            iterations=args.iterations,
+            samples_per_iteration=args.samples
         )
 
     elif args.mode == 'eval':
-        print("Evaluating model...")
-        trainer.evaluate_model(
-            num_tests=args.num_tests,
-            use_oll_pll=args.use_oll_pll,
-            custom_scramble=args.custom_scramble
+        level = args.level if args.level is not None else trainer.curriculum_level
+        print(f"Evaluating at curriculum level {level}")
+        trainer.evaluate(
+            num_tests=20,
+            curriculum_level=level,
+            use_mcts=args.mcts
         )
 
-    elif args.mode == 'solve_custom':
-        if not args.custom_scramble:
-            print("Error: Custom scramble required for solve_custom mode")
-            return
+    elif args.mode == 'demo':
+        level = args.level if args.level is not None else trainer.curriculum_level
+        print(f"Demonstrating solve at curriculum level {level}")
+        trainer.demo_solve(
+            curriculum_level=level,
+            use_mcts=args.mcts
+        )
 
-        print(f"Solving custom scramble: {args.custom_scramble}")
-        trainer.solve_custom_scramble(args.custom_scramble)
+    elif args.mode == 'custom':
+        # If scramble is not provided via command line, ask for it
+        scramble = args.scramble
+        if not scramble:
+            scramble = input("Enter custom scramble formula (e.g., 'R U R\\' U\\'): ")
 
-    elif args.mode == 'solve_random':
-        print("Solving random scramble...")
-        trainer.solve_random_scramble(use_oll_pll=args.use_oll_pll)
-
-    print("Operation completed!")
-
+        print(f"Solving cube with custom scramble: {scramble}")
+        trainer.solve_custom(scramble, use_mcts=args.mcts)
 
 if __name__ == "__main__":
     main()

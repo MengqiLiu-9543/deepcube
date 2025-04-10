@@ -5,7 +5,7 @@ Cube Environment Module (CubeEnv):
 - Based on cube_rotation.py RubikCube class
 - Provides environment interface for Reinforcement Learning
 - Supports state representation, action execution, and reward computation
-- Includes formula testing functionality and OLL+PLL scramble generation
+- Includes formula testing functionality and curriculum-based scramble generation
 """
 
 import numpy as np
@@ -15,14 +15,14 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 # Import the original cube code
 from cube_rotation import RubikCube, draw_cube, rotate_face, rotate_face_ccw, rotate_face_180
-# Import the OLL+PLL generator
-from random_cube_generator import generate_oll_pll
+# Import the OLL+PLL generator with curriculum support
+from random_cube_generator import generate_scramble_by_level, generate_oll_pll
 
 
 class CubeEnv:
     """
     Cube Environment based on RubikCube class
-    Suitable for Reinforcement Learning training
+    Suitable for Reinforcement Learning training with curriculum learning
     """
 
     def __init__(self, initial_state=None):
@@ -71,13 +71,17 @@ class CubeEnv:
         # Maximum steps limit
         self.max_steps = 30
 
-    def reset(self, scramble=None, use_oll_pll=False):
+        # Current curriculum level (default: 1)
+        self.curriculum_level = 1
+
+    def reset(self, scramble=None, use_oll_pll=False, curriculum_level=None):
         """
         Reset the environment
 
         Args:
             scramble: Optional scramble formula string, e.g., "R U F' L"
             use_oll_pll: If True, use generate_oll_pll() to create a scramble
+            curriculum_level: If provided, use this level for scramble generation
 
         Returns:
             state: The state after reset
@@ -85,10 +89,20 @@ class CubeEnv:
         # Reset to initial state
         self.cube = RubikCube()
 
+        # Update curriculum level if provided
+        if curriculum_level is not None:
+            self.curriculum_level = curriculum_level
+
         # Generate a scramble if requested
         if use_oll_pll:
             scramble = generate_oll_pll()
             print(f"Generated OLL+PLL scramble: {scramble}")
+        elif curriculum_level is not None:
+            # Use curriculum-based scramble generation
+            scramble = generate_scramble_by_level(self.curriculum_level)
+            print(
+                f"Generated Level {self.curriculum_level} scramble: {scramble}"
+            )
 
         # If a scramble formula is provided, execute it
         if scramble:
@@ -136,18 +150,26 @@ class CubeEnv:
         done = self.is_solved() or self.current_step >= self.max_steps
 
         # Reward design:
-        # - Completion: +1
-        # - Each step: -1 (encourages fewer steps)
+        # - Completion: +10 (higher reward for successful completion)
+        # - Each step: -0.1 (small penalty for each step to encourage efficiency)
+        # - Curriculum bonus: +5 for solving level 5, +4 for level 4, etc.
         if self.is_solved():
-            reward = 1.0
+            # Base reward plus curriculum bonus
+            reward = 10.0 + (self.curriculum_level / 2.0)
         else:
-            reward = -1
+            # Small penalty for each step
+            reward = -0.1
+
+            # If max steps reached without solving, larger penalty
+            if self.current_step >= self.max_steps:
+                reward -= 1.0
 
         # Return next state, reward, completion status, and info
         return self.get_state(), reward, done, {
             "action": action_str,
             "steps": self.current_step,
-            "solved": self.is_solved()
+            "solved": self.is_solved(),
+            "curriculum_level": self.curriculum_level
         }
 
     def get_state(self):
@@ -191,6 +213,33 @@ class CubeEnv:
 
         return one_hot
 
+    def set_curriculum_level(self, level):
+        """
+        Set the current curriculum level
+
+        Args:
+            level: Integer representing difficulty (1-5)
+
+        Returns:
+            None
+        """
+        if 1 <= level <= 5:
+            self.curriculum_level = level
+            print(f"Curriculum level set to {level}")
+        else:
+            print(
+                f"Invalid curriculum level: {level}. Using current level: {self.curriculum_level}"
+            )
+
+    def generate_curriculum_scramble(self):
+        """
+        Generate a scramble based on the current curriculum level
+
+        Returns:
+            The scramble formula string
+        """
+        scramble = generate_scramble_by_level(self.curriculum_level)
+        return scramble
 
     def custom_scramble(self, scramble_sequence):
         """
@@ -204,13 +253,13 @@ class CubeEnv:
         """
         # Reset to solved state first
         self.reset()
-        
+
         # Execute the scramble sequence
         if self.execute_formula(scramble_sequence):
             print(f"Applied custom scramble: {scramble_sequence}")
         else:
             print("Failed to apply custom scramble - invalid moves detected")
-            
+
         return self.get_state()
 
     def is_solved(self):
@@ -310,11 +359,24 @@ class CubeEnv:
 
         return result_cube
 
+    def copy(self):
+        """
+        Create a deep copy of the current environment
+
+        Returns:
+            A new CubeEnv instance with the same state
+        """
+        new_env = CubeEnv(initial_state=self.cube)
+        new_env.current_step = self.current_step
+        new_env.curriculum_level = self.curriculum_level
+        return new_env
+
 
 # Helper functions
 def create_scrambled_cube(scramble_formula=None,
                           n_random_moves=0,
-                          use_oll_pll=False):
+                          use_oll_pll=False,
+                          curriculum_level=None):
     """
     Create a scrambled cube
 
@@ -322,13 +384,21 @@ def create_scrambled_cube(scramble_formula=None,
         scramble_formula: Specific scramble formula to use
         n_random_moves: Number of random moves for scrambling
         use_oll_pll: Whether to use OLL+PLL generator
+        curriculum_level: Curriculum difficulty level (1-5)
 
     Returns:
         Scrambled cube environment
     """
     env = CubeEnv()
 
-    if use_oll_pll:
+    if curriculum_level is not None:
+        env.set_curriculum_level(curriculum_level)
+        scramble_formula = env.generate_curriculum_scramble()
+        print(
+            f"Using curriculum level {curriculum_level} scramble: {scramble_formula}"
+        )
+
+    elif use_oll_pll:
         scramble_formula = generate_oll_pll()
         print(f"Using OLL+PLL scramble: {scramble_formula}")
 
@@ -343,35 +413,36 @@ def create_scrambled_cube(scramble_formula=None,
     return env
 
 
-'''
-The demo code is commented out as it is not needed for the current implementation.
-# Demo code
-def demo():
-    """Demonstrate environment functionality"""
-    # Create environment
-    env = CubeEnv()
+# Demo function for testing curriculum learning
+def curriculum_demo():
+    """Demonstrate curriculum learning functionality"""
+    print("Demonstrating curriculum learning levels:")
 
-    # Test a formula
-    test_formula = "R U R' U'"
-    print(f"Testing formula: {test_formula}")
-    env.test_formula(test_formula)
+    for level in range(1, 6):
+        print(f"\n--- Curriculum Level {level} ---")
+        env = create_scrambled_cube(curriculum_level=level)
+        print("Scrambled cube state:")
+        env.render()
 
-    # Test OLL+PLL scramble
-    print("\nTesting OLL+PLL scramble:")
-    scrambled_env = create_scrambled_cube(use_oll_pll=True)
-    scrambled_env.render()
-    scrambled_env.save_image("oll_pll_scrambled.png")
+        # Attempt to solve with a simple algorithm (just for demo)
+        solved = False
+        for _ in range(10):  # Try a few random moves
+            action = random.choice(env.action_space)
+            state, reward, done, info = env.step(action)
+            if done and info["solved"]:
+                solved = True
+                print(f"Solved with action: {action}, reward: {reward}")
+                break
 
-    # Execute some actions
-    print("\nExecuting some actions:")
-    state, reward, done, info = scrambled_env.step("F")
-    print(f"Action: F, Reward: {reward}, Completed: {done}")
-    scrambled_env.render()
+        if not solved:
+            print("Not solved with random actions (expected)")
 
-    return env
+        print("Final state:")
+        env.render()
+
+    return "Curriculum demonstration complete"
+
 
 if __name__ == "__main__":
-    # Run demo
-    demo()
-
-'''
+    # Run curriculum demo
+    curriculum_demo()
