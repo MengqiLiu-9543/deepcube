@@ -1,11 +1,10 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-This code implements:
-1. RubikCube class to simulate cube state and generate scrambled states based on input moves (e.g., "U R U' L2")
-2. Uses matplotlib to draw cube layout diagram and save as image (rubik_cube.png)
-Note: Left and right face colors adjusted - left face is green, right face is blue.
+此代码实现了：
+1. RubikCube 类，用于模拟魔方状态，根据输入的转动指令（例如 "U R U' L2"）生成打乱状态；
+2. 利用 matplotlib 绘制魔方展开图，并保存为图片 (rubik_cube.png)。
+注意：左右面颜色已调整，左面为绿色，右面为蓝色。
 """
 
 import matplotlib.pyplot as plt
@@ -13,43 +12,43 @@ from matplotlib.patches import Rectangle
 from random_cube_generator import generate_oll_pll
 
 def rotate_face(face):
-    """Rotate 3x3 matrix face clockwise"""
+    """顺时针旋转 3x3 矩阵表示的面"""
     return [list(x)[::-1] for x in zip(*face)]
 
 def rotate_face_ccw(face):
-    """Rotate 3x3 matrix face counter-clockwise"""
+    """逆时针旋转 3x3 矩阵表示的面"""
     return [list(x) for x in zip(*face[::-1])]
 
 def rotate_face_180(face):
-    """180-degree rotation"""
+    """180度旋转"""
     return [row[::-1] for row in face[::-1]]
 
 
 class RubikCube:
     def __init__(self):
-        # Define six faces of the cube using standard colors:
-        # U(up): White(W), D(down): Yellow(Y)
-        # F(front): Red(R), B(back): Orange(O)
-        # Modified sides: L(left) is Green(G), R(right) is Blue(B)
+        # 定义魔方六个面，采用常用颜色：
+        # U(上): 白色(W)、D(下): 黄色(Y)
+        # F(前): 红色(R)、B(后): 橙色(O)
+        # 修改左右面：左面 L 为绿色(G)，右面 R 为蓝色(B)
         self.faces = {
             'U': [['W'] * 3 for _ in range(3)],
             'D': [['Y'] * 3 for _ in range(3)],
             'F': [['R'] * 3 for _ in range(3)],
             'B': [['O'] * 3 for _ in range(3)],
-            'L': [['G'] * 3 for _ in range(3)],  # Left face: Green
-            'R': [['B'] * 3 for _ in range(3)]   # Right face: Blue
+            'L': [['G'] * 3 for _ in range(3)],  # 左面：绿色
+            'R': [['B'] * 3 for _ in range(3)]   # 右面：蓝色
         }
 
     def move(self, notation):
         """
-        Parse single move notation
-        Supports formats like "U", "U'", "U2"
+        解析单个转动指令
+        支持例如 "U", "U'", "U2"
         """
         if notation.endswith("2"):
             times = 2
             move = notation[0]
         elif notation.endswith("'"):
-            times = 3  # Three clockwise rotations equals one counter-clockwise
+            times = 3  # 顺时针旋转三次 等价于一次逆时针
             move = notation[0]
         else:
             times = 1
@@ -72,12 +71,12 @@ class RubikCube:
         elif move == 'R':
             self.R()
         else:
-            print(f"Unknown move: {move}")
+            print(f"未知的转动指令: {move}")
 
     def U(self):
-        """Upper layer clockwise rotation"""
+        """上层顺时针转动"""
         self.faces['U'] = rotate_face(self.faces['U'])
-        # U layer adjacent to first row of F, R, B, L faces
+        # U 层相邻于 F, R, B, L 四个面的第一行
         temp = self.faces['F'][0][:]
         self.faces['F'][0] = self.faces['R'][0][:]
         self.faces['R'][0] = self.faces['B'][0][:]
@@ -85,9 +84,9 @@ class RubikCube:
         self.faces['L'][0] = temp
 
     def D(self):
-        """Down layer clockwise rotation"""
+        """下层顺时针转动"""
         self.faces['D'] = rotate_face(self.faces['D'])
-        # D layer adjacent to bottom row of F, L, B, R faces
+        # D 层相邻于 F, L, B, R 四个面的底行
         temp = self.faces['F'][2][:]
         self.faces['F'][2] = self.faces['L'][2][:]
         self.faces['L'][2] = self.faces['B'][2][:]
@@ -95,9 +94,9 @@ class RubikCube:
         self.faces['R'][2] = temp
 
     def F(self):
-        """Front face clockwise rotation"""
+        """前面顺时针转动"""
         self.faces['F'] = rotate_face(self.faces['F'])
-        # F face adjacent to U bottom row, L right column, D top row, R left column
+        # F 面相邻于 U 底行、L 右列、D 顶行、R 左列
         temp = self.faces['U'][2][:]
         for i in range(3):
             self.faces['U'][2][i] = self.faces['L'][2 - i][2]
@@ -109,9 +108,9 @@ class RubikCube:
             self.faces['R'][i][0] = temp[i]
 
     def B(self):
-        """Back face clockwise rotation"""
+        """后面顺时针转动"""
         self.faces['B'] = rotate_face(self.faces['B'])
-        # B face adjacent to U top row, R right column, D bottom row, L left column
+        # B 面相邻于 U 顶行、R 右列、D 底行、L 左列
         temp = self.faces['U'][0][:]
         for i in range(3):
             self.faces['U'][0][i] = self.faces['R'][i][2]
@@ -123,9 +122,9 @@ class RubikCube:
             self.faces['L'][i][0] = temp[2 - i]
 
     def L(self):
-        """Left face clockwise rotation"""
+        """左面顺时针转动"""
         self.faces['L'] = rotate_face(self.faces['L'])
-        # L face adjacent to U left column, B right column, D left column, F left column
+        # L 面相邻于 U 左列、B 右列、D 左列、F 左列
         temp = [self.faces['U'][i][0] for i in range(3)]
         for i in range(3):
             self.faces['U'][i][0] = self.faces['B'][2 - i][2]
@@ -137,9 +136,9 @@ class RubikCube:
             self.faces['F'][i][0] = temp[i]
 
     def R(self):
-        """Right face clockwise rotation"""
+        """右面顺时针转动"""
         self.faces['R'] = rotate_face(self.faces['R'])
-        # R face adjacent to U right column, F right column, D right column, B left column
+        # R 面相邻于 U 右列、F 右列、D 右列、B 左列
         temp = [self.faces['U'][i][2] for i in range(3)]
         for i in range(3):
             self.faces['U'][i][2] = self.faces['F'][i][2]
@@ -151,7 +150,8 @@ class RubikCube:
             self.faces['B'][i][0] = temp[2 - i]
 
     def display(self):
-        """Print cube state to console (unfolded view)"""
+        """控制台打印魔方状态（展开图）"""
+        # 打印上层
         print("      Up")
         for row in self.faces['U']:
             print("      " + " ".join(row))
@@ -168,7 +168,7 @@ class RubikCube:
 
 def draw_cube(cube, filename="rubik_cube.png"):
     """
-    Draw cube layout using matplotlib:
+    利用 matplotlib 绘制魔方展开图：
 
            +-----+
            |  U  |
@@ -178,12 +178,12 @@ def draw_cube(cube, filename="rubik_cube.png"):
            |  D  |
            +-----+
 
-    Each face is 3x3 squares, filled with corresponding colors:
-      U: White, D: Yellow, F: Red, B: Orange, L: Green, R: Blue
+    每个面为 3x3 的方块，各小方块用相应颜色填充：
+      U: 白色, D: 黄色, F: 红色, B: 橙色, L: 绿色, R: 蓝色
     """
-    # Define offset positions (x, y) for each face on canvas
+    # 定义六个面的在画布上的偏移位置 (x, y)
     face_offsets = {
-        'U': (3, 6),  # Upper face, starts at (3,6)
+        'U': (3, 6),  # 上面，从 (3,6) 开始绘制
         'L': (0, 3),
         'F': (3, 3),
         'R': (6, 3),
@@ -191,22 +191,22 @@ def draw_cube(cube, filename="rubik_cube.png"):
         'D': (3, 0)
     }
 
-    # Color mapping: G for Green, B for Blue
+    # 定义颜色映射，不需修改：G 代表绿色，B 代表蓝色
     color_map = {
-        'W': "#FFFFFF",  # White
-        'Y': "#FFFF00",  # Yellow
-        'R': "#FF0000",  # Red
-        'O': "#FFA500",  # Orange
-        'G': "#00FF00",  # Green
-        'B': "#0000FF"   # Blue
+        'W': "#FFFFFF",  # 白色
+        'Y': "#FFFF00",  # 黄色
+        'R': "#FF0000",  # 红色
+        'O': "#FFA500",  # 橙色
+        'G': "#00FF00",  # 绿色
+        'B': "#0000FF"   # 蓝色
     }
 
     fig, ax = plt.subplots(figsize=(6, 6))
 
-    # Draw each face
+    # 绘制每个面
     for face, offset in face_offsets.items():
         ox, oy = offset
-        # Each face is 3x3 squares, note: row 0 is top row, display inverted
+        # 每个面 3x3 小格，注意：列表中 row 0 为顶行，绘图时反向显示
         for i in range(3):
             for j in range(3):
                 color_letter = cube.faces[face][i][j]
@@ -224,17 +224,18 @@ def draw_cube(cube, filename="rubik_cube.png"):
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
     plt.close()
-    print(f"Cube layout saved as {filename}")
+    print(f"魔方展开图已保存为 {filename}")
 
 
 def main():
     cube = RubikCube()
     scramble = generate_oll_pll()
+    # scramble = "B"
     moves = scramble.split()
     for move in moves:
         cube.move(move)
-    print("Scramble formula:", scramble)
-    print("\nCube state after scramble:")
+    print("打乱公式：", scramble)
+    print("\n打乱后的魔方状态：")
     cube.display()
 
     draw_cube(cube, filename="rubik_cube.png")
