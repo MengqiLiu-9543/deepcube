@@ -1,0 +1,84 @@
+~/workspace$ python cube_trainer.py --mode custom --scramble "R U R' U'"
+2025-04-10 16:22:32.032722: I tensorflow/tsl/cuda/cudart_stub.cc:28] Could not find cuda drivers on your machine, GPU will not be used.
+2025-04-10 16:22:32.061402: E tensorflow/compiler/xla/stream_executor/cuda/cuda_dnn.cc:9342] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2025-04-10 16:22:32.061438: E tensorflow/compiler/xla/stream_executor/cuda/cuda_fft.cc:609] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2025-04-10 16:22:32.061473: E tensorflow/compiler/xla/stream_executor/cuda/cuda_blas.cc:1518] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2025-04-10 16:22:32.067688: I tensorflow/tsl/cuda/cudart_stub.cc:28] Could not find cuda drivers on your machine, GPU will not be used.
+2025-04-10 16:22:32.067892: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2025-04-10 16:22:34.000699: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+Initializing neural network with resnet architecture
+Model: "model"
+__________________________________________________________________________________________________
+ Layer (type)                Output Shape                 Param #   Connected to                  
+==================================================================================================
+ input_1 (InputLayer)        [(None, 54, 6)]              0         []                            
+                                                                                                  
+ flatten (Flatten)           (None, 324)                  0         ['input_1[0][0]']             
+                                                                                                  
+ dense (Dense)               (None, 1024)                 332800    ['flatten[0][0]']             
+                                                                                                  
+ batch_normalization (Batch  (None, 1024)                 4096      ['dense[0][0]']               
+ Normalization)                                                                                   
+                                                                                                  
+ residual_block (ResidualBl  (None, 1024)                 2107392   ['batch_normalization[0][0]'] 
+ ock)                                                                                             
+                                                                                                  
+ residual_block_1 (Residual  (None, 1024)                 2107392   ['residual_block[0][0]']      
+ Block)                                                                                           
+                                                                                                  
+ residual_block_2 (Residual  (None, 1024)                 2107392   ['residual_block_1[0][0]']    
+ Block)                                                                                           
+                                                                                                  
+ residual_block_3 (Residual  (None, 1024)                 2107392   ['residual_block_2[0][0]']    
+ Block)                                                                                           
+                                                                                                  
+ residual_block_4 (Residual  (None, 1024)                 2107392   ['residual_block_3[0][0]']    
+ Block)                                                                                           
+                                                                                                  
+ residual_block_5 (Residual  (None, 1024)                 2107392   ['residual_block_4[0][0]']    
+ Block)                                                                                           
+                                                                                                  
+ residual_block_6 (Residual  (None, 1024)                 2107392   ['residual_block_5[0][0]']    
+ Block)                                                                                           
+                                                                                                  
+ residual_block_7 (Residual  (None, 1024)                 2107392   ['residual_block_6[0][0]']    
+ Block)                                                                                           
+                                                                                                  
+ dense_17 (Dense)            (None, 512)                  524800    ['residual_block_7[0][0]']    
+                                                                                                  
+ dense_19 (Dense)            (None, 512)                  524800    ['residual_block_7[0][0]']    
+                                                                                                  
+ batch_normalization_17 (Ba  (None, 512)                  2048      ['dense_17[0][0]']            
+ tchNormalization)                                                                                
+                                                                                                  
+ batch_normalization_18 (Ba  (None, 512)                  2048      ['dense_19[0][0]']            
+ tchNormalization)                                                                                
+                                                                                                  
+ dense_18 (Dense)            (None, 256)                  131328    ['batch_normalization_17[0][0]
+                                                                    ']                            
+                                                                                                  
+ dense_20 (Dense)            (None, 256)                  131328    ['batch_normalization_18[0][0]
+                                                                    ']                            
+                                                                                                  
+ value_output (Dense)        (None, 1)                    257       ['dense_18[0][0]']            
+                                                                                                  
+ policy_output (Dense)       (None, 15)                   3855      ['dense_20[0][0]']            
+                                                                                                  
+==================================================================================================
+Total params: 18516496 (70.63 MB)
+Trainable params: 18479632 (70.49 MB)
+Non-trainable params: 36864 (144.00 KB)
+__________________________________________________________________________________________________
+Model loaded from 1lll_solver_model.h5
+Trainer initialized with curriculum level 1
+Solving cube with custom scramble: R U R' U'
+Applied custom scramble: R U R' U'
+Traceback (most recent call last):
+  File "/home/runner/workspace/cube_trainer.py", line 691, in <module>
+    main()
+  File "/home/runner/workspace/cube_trainer.py", line 688, in main
+    trainer.solve_custom(scramble, use_mcts=args.mcts)
+  File "/home/runner/workspace/cube_trainer.py", line 411, in solve_custom
+    if env.custom_scramble(scramble):
+ValueError: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
