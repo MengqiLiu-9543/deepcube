@@ -43,9 +43,9 @@ class CubeNeuralNetwork:
 
         # Convert to one-hot encoding if not already
         # For cube state where each position has 6 possible colors
-        reshaped_input = tf.reshape(input_layer, [-1, 54, 1])
-        one_hot_input = tf.one_hot(tf.cast(reshaped_input, tf.int32), depth=6)
-        flattened_input = tf.reshape(one_hot_input, [-1, 54 * 6])
+        reshaped_input = keras.layers.Reshape((54, 1))(input_layer)
+        one_hot_input = keras.layers.Lambda(lambda x: tf.one_hot(tf.cast(x, tf.int32), depth=6))(reshaped_input)
+        flattened_input = keras.layers.Flatten()(one_hot_input)
 
         # Shared network layers
         x = keras.layers.Dense(1024, activation='elu')(flattened_input)
