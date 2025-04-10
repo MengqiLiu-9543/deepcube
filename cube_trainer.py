@@ -379,10 +379,10 @@ class CubeTrainer:
                 # Use greedy policy (no search)
                 state = solve_env.get_one_hot_state()
                 _, policy = self.network.predict(state)
-                action = np.argmax(policy)
+                action = np.clip(np.argmax(policy), 0, len(solve_env.action_space) - 1)
 
-            # Ensure action is valid
-            if action >= len(solve_env.action_space):
+            # Double check action is valid
+            if action < 0 or action >= len(solve_env.action_space):
                 print(f"Warning: Invalid action {action}, using random action instead")
                 action = np.random.randint(0, len(solve_env.action_space))
 
